@@ -5,7 +5,9 @@
 //! rounded rectangles with a radius of a quarter of their height, large and
 //! extra-large ones are capsules, and icon buttons are circles.
 
-use crate::element::{Element, Role, div, row, text};
+use crate::Color;
+use crate::Theme;
+use crate::element::{Element, Role, SLIDER_THUMB, div, row, text};
 
 /// The standard control sizes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -240,6 +242,85 @@ pub fn menu_check_item<M>(label: impl Into<String>, checked: bool, message: M) -
 /// A thin line between groups of menu items.
 pub fn menu_separator<M>() -> Element<M> {
     div().h(9.0).px_2().justify_center().child(div().h(1.0).bg(crate::Color::rgba(128, 128, 128, 0.25)))
+}
+
+/// An on/off switch, 38 by 22 px: a track in the accent color when on, gray
+/// when off, with a white knob. Pressing it sends `message`, which should
+/// flip the value you pass next time. Name it for screen readers with
+/// `.label(...)`.
+pub fn switch<M>(theme: &Theme, on: bool, message: M) -> Element<M> {
+    let track = if on { theme.accent() } else { Color::rgba(120, 120, 128, if theme.is_dark() { 0.4 } else { 0.32 }) };
+    let knob = div().size(18.0, 18.0).rounded_full().bg(Color::WHITE).border(0.5, Color::rgba(0, 0, 0, 0.12));
+    let mut e = row().w(38.0).h(22.0).shrink_0().padding(2.0).items_center().rounded_full().bg(track).child(knob).on_press(message);
+    e = if on { e.justify_end() } else { e.justify_start() };
+    e.role(Role::Switch).checked(on)
+}
+
+/// A checkbox with a text label. The whole row is the target; pressing it
+/// sends `message`, which should flip the value you pass next time.
+pub fn checkbox<M>(theme: &Theme, label: impl Into<String>, checked: bool, message: M) -> Element<M> {
+    let label = label.into();
+    let mut boxed = div().size(16.0, 16.0).shrink_0().rounded(4.0).items_center().justify_center();
+    boxed = if checked {
+        boxed.bg(theme.accent()).child(text("\u{2713}").text_size(11.0).font_bold().text_color(Color::WHITE))
+    } else {
+        boxed.bg(Color::rgba(128, 128, 128, 0.12)).border(1.0, Color::rgba(128, 128, 128, 0.55))
+    };
+    row()
+        .items_center()
+        .gap_2()
+        .h(22.0)
+        .child(boxed)
+        .child(text(label.clone()).text_size(13.0))
+        .on_press(message)
+        .role(Role::Checkbox)
+        .checked(checked)
+        .label(label)
+}
+
+/// A horizontal slider from 0 to 1, 200 px wide unless you set `w` or `grow`.
+/// Pressing or dragging it, or the arrow keys when it has focus, send
+/// `on_change` with the new value, which your `update` should store and pass
+/// back as `value`. The thumb is a small glass pill over the track.
+pub fn slider<M: 'static>(theme: &Theme, value: f32, on_change: impl Fn(f32) -> M + 'static) -> Element<M> {
+    let value = if value.is_finite() { value.clamp(0.0, 1.0) } else { 0.0 };
+    let gray = Color::rgba(120, 120, 128, if theme.is_dark() { 0.4 } else { 0.28 });
+    let fill = div().h(4.0).grow_by(value).bg(theme.accent());
+    let rest = div().h(4.0).grow_by(1.0 - value).bg(gray);
+    let thumb = div().size(SLIDER_THUMB, 20.0).shrink_0().rounded_full().glass();
+    row()
+        .w(200.0)
+        .h(28.0)
+        .items_center()
+        .child(fill)
+        .child(thumb)
+        .child(rest)
+        .on_drag(value, on_change)
+        .role(Role::Slider)
+}
+
+/// A row of mutually exclusive choices on one glass capsule; the selected
+/// one gets a soft pill. `on_select` turns the chosen index into a message.
+pub fn segmented<M: Clone>(theme: &Theme, options: &[&str], selected: usize, on_select: impl Fn(usize) -> M) -> Element<M> {
+    let pill = if theme.is_dark() { Color::rgba(255, 255, 255, 0.2) } else { Color::rgba(120, 120, 128, 0.2) };
+    let segments = options.iter().enumerate().map(|(i, name)| {
+        let mut e = row()
+            .items_center()
+            .justify_center()
+            .h(24.0)
+            .px_3()
+            .rounded_full()
+            .child(text(*name).text_size(13.0))
+            .on_press(on_select(i))
+            .role(Role::Tab)
+            .checked(i == selected)
+            .label(*name);
+        if i == selected {
+            e = e.bg(pill).font_medium();
+        }
+        e
+    });
+    row().items_center().self_start().h(28.0).padding(2.0).shrink_0().rounded_full().glass().role(Role::TabList).children(segments)
 }
 
 #[cfg(test)]

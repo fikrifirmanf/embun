@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use embun_motion::{Animated, Spring};
 
-use crate::element::{Element, Kind, Role};
+use crate::element::{Element, Kind, Role, SLIDER_THUMB};
 use crate::layout::{self, Rect4, ScrollInfo};
 use crate::render::Renderer;
 use crate::scene::{self, Highlight, Scene};
@@ -71,6 +71,9 @@ struct AccessNode {
     children: Vec<u64>,
     clickable: bool,
     focusable: bool,
+    toggled: Option<bool>,
+    selected: Option<bool>,
+    numeric: Option<f32>,
 }
 
 /// The id of the window node that holds the app's root element.
@@ -91,8 +94,13 @@ struct Target {
     overlay: bool,
     press: Option<u64>,
     scroll: Option<u64>,
+    /// The slider this element belongs to, if any.
+    drag: Option<u64>,
     input: bool,
 }
+
+/// How far an arrow key, or a screen reader's increment, moves a slider.
+const SLIDER_STEP: f32 = 0.05;
 
 const PRESS: Spring = Spring { response: 0.2, damping_fraction: 0.8 };
 const HOVER: Spring = Spring { response: 0.25, damping_fraction: 1.0 };
@@ -114,6 +122,8 @@ pub struct Ui<A: App> {
     pointer: Option<[f32; 2]>,
     hovered: Option<u64>,
     pressed: Option<u64>,
+    /// The slider being dragged.
+    dragging: Option<u64>,
     focused: Option<u64>,
     edit: Option<Edit>,
     /// Rects and clips from the last layout, in pre-order. Hover, press,
@@ -148,6 +158,7 @@ impl<A: App> Ui<A> {
             pointer: None,
             hovered: None,
             pressed: None,
+            dragging: None,
             focused: None,
             edit: None,
             layout_cache: None,
@@ -233,14 +244,15 @@ impl<A: App> Ui<A> {
         self.focus_order.clear();
         let mut press_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
         let mut scroll_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
+        let mut drag_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
         for (i, n) in nodes.iter().enumerate() {
             let inherited = |v: &[Option<u64>]| n.parent.and_then(|p| v[p]);
-            if n.el.role == Role::TextField {
+            if n.el.role == Role::TextField || n.el.on_drag.is_some() {
                 self.focus_order.push(n.id);
             }
             let press = if let Some(m) = &n.el.on_press {
                 self.messages.insert(n.id, m.clone());
-                if matches!(n.el.role, Role::Button | Role::MenuItem) {
+                if matches!(n.el.role, Role::Button | Role::MenuItem | Role::Switch | Role::Checkbox | Role::Tab) {
                     self.focus_order.push(n.id);
                 }
                 if n.el.style.overlay {
@@ -255,8 +267,10 @@ impl<A: App> Ui<A> {
                 inherited(&press_of)
             };
             let scroll = if n.el.style.scroll_y { Some(n.id) } else { inherited(&scroll_of) };
+            let drag = if n.el.on_drag.is_some() { Some(n.id) } else { inherited(&drag_of) };
             press_of.push(press);
             scroll_of.push(scroll);
+            drag_of.push(drag);
             self.targets.push(Target {
                 id: n.id,
                 rect: n.rect,
@@ -265,6 +279,7 @@ impl<A: App> Ui<A> {
                 overlay: n.in_overlay,
                 press,
                 scroll,
+                drag,
                 input: n.el.on_input.is_some(),
             });
             let _ = i;
@@ -336,6 +351,21 @@ impl<A: App> Ui<A> {
             if a.focusable {
                 node.add_action(accesskit::Action::Focus);
             }
+            if let Some(on) = a.toggled {
+                node.set_toggled(if on { accesskit::Toggled::True } else { accesskit::Toggled::False });
+            }
+            if let Some(selected) = a.selected {
+                node.set_selected(selected);
+            }
+            if let Some(v) = a.numeric {
+                node.set_numeric_value(v as f64);
+                node.set_min_numeric_value(0.0);
+                node.set_max_numeric_value(1.0);
+                node.set_numeric_value_step(SLIDER_STEP as f64);
+                node.add_action(accesskit::Action::SetValue);
+                node.add_action(accesskit::Action::Increment);
+                node.add_action(accesskit::Action::Decrement);
+            }
             if a.role == accesskit::Role::TextInput {
                 node.add_action(accesskit::Action::SetValue);
                 node.add_action(accesskit::Action::ReplaceSelectedText);
@@ -356,6 +386,8 @@ impl<A: App> Ui<A> {
     /// Carries out an action a screen reader asked for: pressing a button,
     /// moving focus, or changing a text field.
     pub fn accessibility_action(&mut self, request: &accesskit::ActionRequest) {
+        // Act on the UI as it is now: several increments can arrive between frames.
+        self.update();
         let id = request.target_node.0;
         let Some(node) = self.access.iter().find(|a| a.id == id).cloned() else { return };
         match request.action {
@@ -365,6 +397,16 @@ impl<A: App> Ui<A> {
                 }
             }
             accesskit::Action::Focus if node.focusable => self.focus(Some(id)),
+            accesskit::Action::Increment | accesskit::Action::Decrement | accesskit::Action::SetValue if node.numeric.is_some() => {
+                let current = node.numeric.unwrap_or(0.0);
+                let next = match (&request.action, &request.data) {
+                    (accesskit::Action::Increment, _) => current + SLIDER_STEP,
+                    (accesskit::Action::Decrement, _) => current - SLIDER_STEP,
+                    (_, Some(accesskit::ActionData::NumericValue(v))) => *v as f32,
+                    _ => return,
+                };
+                self.set_slider(id, next);
+            }
             accesskit::Action::SetValue | accesskit::Action::ReplaceSelectedText if node.role == accesskit::Role::TextInput => {
                 let Some(accesskit::ActionData::Value(text)) = &request.data else { return };
                 if self.focused != Some(id) {
@@ -536,6 +578,42 @@ impl<A: App> Ui<A> {
             .map(|(_, t)| t)
     }
 
+    /// Sends the message for slider `id` at position `value`.
+    fn set_slider(&mut self, id: u64, value: f32) {
+        self.ensure_view();
+        let Some(view) = self.view.as_ref() else { return };
+        let nodes = layout::flatten(view, &self.theme);
+        let Some(on_drag) = nodes.iter().find(|n| n.id == id).and_then(|n| n.el.on_drag.as_deref()) else { return };
+        let message = on_drag(value.clamp(0.0, 1.0));
+        self.send(message);
+    }
+
+    /// Moves slider `id` to where the pointer is, at logical `x`.
+    fn drag_to(&mut self, id: u64, x: f32) {
+        let Some(rect) = self.targets.iter().find(|t| t.id == id).map(|t| t.rect) else { return };
+        let track = (rect[2] - SLIDER_THUMB).max(1.0);
+        self.set_slider(id, (x - rect[0] - SLIDER_THUMB / 2.0) / track);
+    }
+
+    /// Arrow keys, Home and End on a focused slider. False if none is focused.
+    fn nudge_slider(&mut self, key: Key) -> bool {
+        let Some(id) = self.focused else { return false };
+        self.ensure_view();
+        let Some(view) = self.view.as_ref() else { return false };
+        let nodes = layout::flatten(view, &self.theme);
+        let Some(value) = nodes.iter().find(|n| n.id == id).filter(|n| n.el.on_drag.is_some()).and_then(|n| n.el.value) else {
+            return false;
+        };
+        let next = match key {
+            Key::Left => value - SLIDER_STEP,
+            Key::Right => value + SLIDER_STEP,
+            Key::Home => 0.0,
+            _ => 1.0,
+        };
+        self.set_slider(id, next);
+        true
+    }
+
     fn animate(&mut self, id: u64, press: Option<f32>, hover: Option<f32>) {
         let (p, h) = self.highlight.entry(id).or_insert_with(|| (Animated::new(0.0, PRESS), Animated::new(0.0, HOVER)));
         if let Some(v) = press {
@@ -551,6 +629,9 @@ impl<A: App> Ui<A> {
     pub fn pointer_moved(&mut self, p: [f32; 2]) {
         self.update();
         self.pointer = Some(p);
+        if let Some(id) = self.dragging {
+            self.drag_to(id, p[0]);
+        }
         let hovered = self.hit(p).and_then(|t| t.press);
         if hovered != self.hovered {
             if let Some(old) = self.hovered {
@@ -590,6 +671,11 @@ impl<A: App> Ui<A> {
             self.dirty = true;
             return;
         }
+        if let Some(id) = hit.as_ref().and_then(|t| t.drag) {
+            self.dragging = Some(id);
+            self.drag_to(id, p[0]);
+            return;
+        }
         self.pressed = hit.and_then(|t| t.press);
         if let Some(id) = self.pressed {
             self.animate(id, Some(1.0), None);
@@ -602,6 +688,9 @@ impl<A: App> Ui<A> {
     /// Releasing over the control that was pressed activates it.
     pub fn pointer_released(&mut self) {
         self.update();
+        if self.dragging.take().is_some() {
+            return;
+        }
         let Some(id) = self.pressed.take() else { return };
         self.animate(id, Some(0.0), None);
         let over = self.pointer.and_then(|p| self.hit(p)).and_then(|t| t.press) == Some(id);
@@ -686,6 +775,7 @@ impl<A: App> Ui<A> {
                 }
                 start
             }),
+            Key::Left | Key::Right | Key::Home | Key::End if self.nudge_slider(key) => {}
             other => self.move_cursor(other),
         }
     }
@@ -744,6 +834,11 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
                 Role::TextField => R::TextInput,
                 Role::Menu => R::Menu,
                 Role::MenuItem => R::MenuItem,
+                Role::Switch => R::Switch,
+                Role::Checkbox => R::CheckBox,
+                Role::Tab => R::Tab,
+                Role::TabList => R::TabList,
+                Role::Slider => R::Slider,
                 Role::Generic if el.style.scroll_y => R::ScrollView,
                 Role::Generic => R::GenericContainer,
             };
@@ -758,7 +853,10 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
         rect: n.rect,
         children: Vec::new(),
         clickable: el.on_press.is_some(),
-        focusable: el.on_press.is_some() || el.on_input.is_some(),
+        focusable: el.on_press.is_some() || el.on_input.is_some() || el.on_drag.is_some(),
+        toggled: matches!(el.role, Role::Switch | Role::Checkbox).then_some(el.checked).flatten(),
+        selected: (el.role == Role::Tab).then_some(el.checked).flatten(),
+        numeric: el.on_drag.as_ref().and(el.value),
     }
 }
 
@@ -1183,5 +1281,189 @@ mod tests {
         ui.pointer_moved([50.0, 250.0]);
         ui.scrolled(-50.0);
         assert_eq!(ui.rect_of_key("row0").expect("row")[1], first[1] - 200.0, "pointer outside the list");
+    }
+
+    struct Settings {
+        wifi: bool,
+        agree: bool,
+        volume: f32,
+        tab: usize,
+    }
+
+    #[derive(Clone)]
+    enum SettingsMsg {
+        Wifi,
+        Agree,
+        Volume(f32),
+        Tab(usize),
+    }
+
+    impl App for Settings {
+        type Message = SettingsMsg;
+        fn update(&mut self, m: SettingsMsg) {
+            match m {
+                SettingsMsg::Wifi => self.wifi = !self.wifi,
+                SettingsMsg::Agree => self.agree = !self.agree,
+                SettingsMsg::Volume(v) => self.volume = v,
+                SettingsMsg::Tab(i) => self.tab = i,
+            }
+        }
+        fn view(&self, theme: &Theme) -> Element<SettingsMsg> {
+            use crate::widgets::{checkbox, segmented, slider, switch};
+            column()
+                .p_4()
+                .gap_2()
+                .child(switch(theme, self.wifi, SettingsMsg::Wifi).key("wifi").label("Wi-Fi"))
+                .child(checkbox(theme, "Agree", self.agree, SettingsMsg::Agree).key("agree"))
+                .child(slider(theme, self.volume, SettingsMsg::Volume).w(228.0).key("volume").label("Volume"))
+                .child(segmented(theme, &["A", "B", "C"], self.tab, SettingsMsg::Tab).key("tabs"))
+        }
+    }
+
+    fn settings() -> Ui<Settings> {
+        Ui::new(Settings { wifi: false, agree: false, volume: 0.5, tab: 0 }, Theme::default(), [300.0, 300.0])
+    }
+
+    fn tap(ui: &mut Ui<Settings>, at: [f32; 2]) {
+        ui.pointer_moved(at);
+        ui.pointer_pressed();
+        ui.pointer_released();
+    }
+
+    fn middle(ui: &mut Ui<Settings>, key: &str) -> [f32; 2] {
+        let r = ui.rect_of_key(key).expect(key);
+        [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]
+    }
+
+    #[test]
+    fn pressing_a_switch_or_checkbox_flips_it() {
+        let mut ui = settings();
+        let at = middle(&mut ui, "wifi");
+        tap(&mut ui, at);
+        assert!(ui.app().wifi);
+        let at = middle(&mut ui, "agree");
+        tap(&mut ui, at);
+        assert!(ui.app().agree);
+        tap(&mut ui, at);
+        assert!(!ui.app().agree);
+    }
+
+    #[test]
+    fn pressing_a_slider_sets_its_value_from_the_pointer_and_dragging_follows() {
+        let mut ui = settings();
+        let r = ui.rect_of_key("volume").expect("slider");
+        // The thumb's center spans the width minus the thumb, so the left
+        // and right ends of that span are 0 and 1.
+        let (left, right) = (r[0] + SLIDER_THUMB / 2.0, r[0] + r[2] - SLIDER_THUMB / 2.0);
+        let y = r[1] + r[3] / 2.0;
+        ui.pointer_moved([left + (right - left) * 0.25, y]);
+        ui.pointer_pressed();
+        assert!((ui.app().volume - 0.25).abs() < 0.001, "pressed at a quarter: {}", ui.app().volume);
+        ui.pointer_moved([left + (right - left) * 0.8, y]);
+        assert!((ui.app().volume - 0.8).abs() < 0.001, "dragged to 0.8: {}", ui.app().volume);
+        // Dragging far past either end, and off the slider vertically, clamps.
+        ui.pointer_moved([right + 500.0, y + 200.0]);
+        assert_eq!(ui.app().volume, 1.0);
+        ui.pointer_moved([left - 500.0, y]);
+        assert_eq!(ui.app().volume, 0.0);
+        ui.pointer_released();
+        // After release, moving does nothing.
+        ui.pointer_moved([right, y]);
+        assert_eq!(ui.app().volume, 0.0);
+    }
+
+    #[test]
+    fn pressing_the_glass_thumb_drags_the_slider_too() {
+        let mut ui = settings();
+        let r = ui.rect_of_key("volume").expect("slider");
+        // At 0.5 the thumb is in the middle of the slider.
+        ui.pointer_moved([r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]);
+        ui.pointer_pressed();
+        ui.pointer_moved([r[0] + r[2] / 2.0 + 40.0, r[1] + r[3] / 2.0]);
+        assert!(ui.app().volume > 0.5, "dragging from the thumb moves the value: {}", ui.app().volume);
+        ui.pointer_released();
+    }
+
+    #[test]
+    fn a_focused_slider_moves_with_the_arrow_keys() {
+        let mut ui = settings();
+        ui.update();
+        // Switch, checkbox, slider, then the three tabs.
+        for _ in 0..3 {
+            ui.key(Key::Tab);
+        }
+        ui.key(Key::Right);
+        assert!((ui.app().volume - 0.55).abs() < 0.001, "{}", ui.app().volume);
+        ui.key(Key::Left);
+        ui.key(Key::Left);
+        assert!((ui.app().volume - 0.45).abs() < 0.001, "{}", ui.app().volume);
+        ui.key(Key::End);
+        assert_eq!(ui.app().volume, 1.0);
+        ui.key(Key::Right);
+        assert_eq!(ui.app().volume, 1.0, "stays at the end");
+        ui.key(Key::Home);
+        assert_eq!(ui.app().volume, 0.0);
+    }
+
+    #[test]
+    fn space_presses_the_focused_switch_and_tab_reaches_the_segments() {
+        let mut ui = settings();
+        ui.update();
+        ui.key(Key::Tab);
+        ui.key(Key::Activate);
+        assert!(ui.app().wifi);
+        for _ in 0..4 {
+            ui.key(Key::Tab);
+        }
+        // Past the checkbox and slider, now on the second segment.
+        ui.key(Key::Activate);
+        assert_eq!(ui.app().tab, 1);
+    }
+
+    #[test]
+    fn switches_sliders_and_tabs_tell_screen_readers_their_state() {
+        use accesskit::{Action, ActionData, ActionRequest, Role as R, Toggled, TreeId};
+        let mut ui = settings();
+        let tree = ui.accessibility(1.0);
+        let find = |role: R| tree.nodes.iter().filter(|(_, n)| n.role() == role).collect::<Vec<_>>();
+        let switch = find(R::Switch);
+        assert_eq!(switch.len(), 1);
+        assert_eq!(switch[0].1.toggled(), Some(Toggled::False));
+        assert_eq!(switch[0].1.label(), Some("Wi-Fi"));
+        assert_eq!(find(R::CheckBox)[0].1.toggled(), Some(Toggled::False));
+        let tabs = find(R::Tab);
+        assert_eq!(tabs.iter().map(|(_, n)| n.is_selected()).collect::<Vec<_>>(), [Some(true), Some(false), Some(false)]);
+        assert_eq!(find(R::TabList).len(), 1);
+        let slider = find(R::Slider);
+        assert_eq!(slider[0].1.numeric_value(), Some(0.5));
+        let id = slider[0].0;
+        let request = |action, data| ActionRequest { action, target_tree: TreeId::ROOT, target_node: id, data };
+        ui.accessibility_action(&request(Action::Increment, None));
+        assert!((ui.app().volume - 0.55).abs() < 0.001);
+        ui.accessibility_action(&request(Action::SetValue, Some(ActionData::NumericValue(0.9))));
+        assert!((ui.app().volume - 0.9).abs() < 0.001);
+        ui.accessibility_action(&request(Action::Decrement, None));
+        assert!((ui.app().volume - 0.85).abs() < 0.001);
+        // Pressing the second tab selects it, and the tree follows.
+        let second = tabs[1].0;
+        ui.accessibility_action(&ActionRequest { action: Action::Click, target_tree: TreeId::ROOT, target_node: second, data: None });
+        assert_eq!(ui.app().tab, 1);
+        let tree = ui.accessibility(1.0);
+        let selected: Vec<_> = tree.nodes.iter().filter(|(_, n)| n.role() == R::Tab).map(|(_, n)| n.is_selected()).collect();
+        assert_eq!(selected, [Some(false), Some(true), Some(false)]);
+    }
+
+    #[test]
+    fn a_slider_given_nan_still_builds() {
+        struct Bad;
+        impl App for Bad {
+            type Message = f32;
+            fn update(&mut self, _: f32) {}
+            fn view(&self, theme: &Theme) -> Element<f32> {
+                crate::widgets::slider(theme, f32::NAN, |v| v)
+            }
+        }
+        let mut ui = Ui::new(Bad, Theme::default(), [300.0, 100.0]);
+        assert!(!ui.scene().glass.is_empty(), "the thumb is still drawn");
     }
 }

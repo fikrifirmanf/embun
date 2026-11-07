@@ -37,8 +37,12 @@ impl App for Static {
 }
 
 fn render(gpu: &Gpu, theme: Theme, view: fn(&Theme) -> Element<()>) -> impl Fn(u32, u32) -> [u8; 3] {
+    render_sized(gpu, theme, [200.0, 100.0], view)
+}
+
+fn render_sized(gpu: &Gpu, theme: Theme, size: [f32; 2], view: fn(&Theme) -> Element<()>) -> impl Fn(u32, u32) -> [u8; 3] {
     let mut renderer = Renderer::new(&gpu.device, &gpu.queue, SNAPSHOT_FORMAT);
-    let mut ui = Ui::new(Static(view), theme, [200.0, 100.0]);
+    let mut ui = Ui::new(Static(view), theme, size);
     let (pixels, width, _) = snapshot(&mut ui, &mut renderer, &gpu.device, &gpu.queue, 1.0);
     move |x, y| {
         let i = ((y * width + x) * 4) as usize;
@@ -129,4 +133,33 @@ fn menu_glass_frosts_the_glass_beneath_it() {
     // Inside the menu away from the button, it is not.
     let [r, _, b] = with_menu(170, 70);
     assert!((b as i32 - r as i32).abs() < 20, "menu away from the button should be neutral, got {:?}", with_menu(170, 70));
+}
+
+#[test]
+fn switches_checkboxes_and_sliders_draw_their_state() {
+    let gpu = gpu();
+    let px = render_sized(gpu, Theme::default(), [200.0, 160.0], |theme| {
+        column()
+            .p_4()
+            .gap_2()
+            .child(switch(theme, true, ()))
+            .child(switch(theme, false, ()))
+            .child(checkbox(theme, "", true, ()))
+            .child(slider(theme, 0.5, |_| ()).w(120.0))
+    });
+    // Rows are 22, 22, 22 and 28 px tall with 8 px gaps, starting at y = 16.
+    let on = px(16 + 4, 16 + 11);
+    assert!(on[0] < 30 && on[1].abs_diff(133) <= 10 && on[2] > 230, "an on switch is accent blue: {on:?}");
+    let off = px(16 + 4, 16 + 22 + 8 + 11);
+    assert!(off.iter().all(|&c| c > 190) && off[2] - off[0] < 20, "an off switch is light gray: {off:?}");
+    let knob = px(16 + 38 - 11, 16 + 11);
+    assert!(knob.iter().all(|&c| c > 245), "the on switch's knob is white at its right end: {knob:?}");
+    let checked = px(16 + 3, 16 + 60 + 11);
+    assert!(checked[2] > 230 && checked[0] < 40, "a checked box is accent blue: {checked:?}");
+    // The slider at one half: accent fill left of the thumb, gray track to its right.
+    let y = 16 + 3 * 30 + 14;
+    let fill = px(16 + 8, y);
+    let rest = px(16 + 112, y);
+    assert!(fill[2] > 230 && fill[0] < 40, "filled part is accent blue: {fill:?}");
+    assert!(rest[2] - rest[0] < 20, "unfilled part is gray: {rest:?}");
 }

@@ -1,6 +1,18 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.2.0 (unreleased)
+
+### Added
+
+- Controls: `switch`, `checkbox`, `slider` and `segmented`. Switches and checkboxes announce their on or off state to screen readers, segments announce which one is selected, and sliders report a value that screen readers can increment, decrement or set.
+- `Element::on_drag` makes any element a slider: pressing or dragging it, or the arrow keys, Home and End when it has focus, send a position from 0 to 1. Also `Element::checked`, `Element::grow_by` and the roles `Switch`, `Checkbox`, `Tab`, `TabList` and `Slider`.
+- The `controls` example shows them all.
+
+### Fixed
+
+- `Ui::accessibility_action` now acts on the UI as it is now. Two increments from a screen reader between frames used to start from the old value.
+
+## 0.1.0 - 2026-11-07
 
 ### Added
 

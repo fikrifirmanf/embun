@@ -63,6 +63,7 @@ Pressing or hovering a glass button only changes the glass layer, so the frost b
 - Images from RGBA8 pixels.
 - `text_input`: a single-line field your app owns the value of. Typing, Backspace and Delete, arrow keys, Home and End, Shift to select, Command-A, copy, cut and paste, clicking to place the cursor, and input methods for languages such as Japanese.
 - Controls: `button`, `icon_button`, prominent buttons, `toolbar_group` and `toolbar_item`, `sidebar`, `sidebar_item` and `sidebar_heading`. Button sizes follow the macOS 27.0.1 captures.
+- `switch`, `checkbox`, `slider` and `segmented`. Sliders take presses, drags and arrow keys, and every one of these tells screen readers its state. Put them on a solid or content background: glass over glass has nothing to frost, so keep the glass for buttons, thumbs and bars.
 - Menus and popovers: `popover`, `menu`, `menu_item`, `menu_check_item` and `menu_separator`. An overlay's glass frosts the finished window beneath it, so a menu over a toolbar shows the toolbar through it. Clicking outside or pressing Escape closes it.
 - Pointer, scroll wheel and trackpad input. Tab and Shift-Tab move keyboard focus between buttons, and Space or Return presses the focused one.
 - Light and dark mode from the system, and glass that frosts more when the window loses focus, as on macOS.
@@ -76,6 +77,7 @@ Not there yet: multi-line text editing, moving the cursor word by word, and imag
 ```sh
 cargo run -p embun --example counter
 cargo run -p embun --example photos
+cargo run -p embun --example controls
 cargo run -p embun --example gallery -- out/   # renders PNGs, no window
 ```
 

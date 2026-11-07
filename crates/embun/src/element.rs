@@ -19,7 +19,17 @@ pub struct Element<M> {
     pub(crate) label: Option<String>,
     /// For text fields: turns the edited text into a message.
     pub(crate) on_input: Option<Box<dyn Fn(String) -> M>>,
+    /// For sliders: turns a position from 0 to 1 into a message.
+    pub(crate) on_drag: Option<Box<dyn Fn(f32) -> M>>,
+    /// On, checked or selected, for switches, checkboxes and tabs.
+    pub(crate) checked: Option<bool>,
+    /// A slider's current position, 0 to 1.
+    pub(crate) value: Option<f32>,
 }
+
+/// Width of a slider's thumb. The thumb's center moves over the slider's
+/// width minus this, so the pointer maps to a value the same way.
+pub(crate) const SLIDER_THUMB: f32 = 28.0;
 
 pub(crate) enum Kind {
     Div,
@@ -42,6 +52,11 @@ pub enum Role {
     TextField,
     Menu,
     MenuItem,
+    Switch,
+    Checkbox,
+    Tab,
+    TabList,
+    Slider,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -164,7 +179,7 @@ impl Image {
 }
 
 fn node<M>(kind: Kind) -> Element<M> {
-    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None }
+    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None, on_drag: None, checked: None, value: None }
 }
 
 /// A single-line text field. It shows `value`; when the user edits it,
@@ -430,6 +445,33 @@ impl<M> Element<M> {
     /// Takes a share of the free space in its row or column.
     pub fn grow(mut self) -> Self {
         self.style.grow = 1.0;
+        self
+    }
+
+    /// Takes `share` of the free space in its row or column, relative to the
+    /// other growing children: `grow_by(1.0)` next to `grow_by(3.0)` gets a quarter.
+    pub fn grow_by(mut self, share: f32) -> Self {
+        self.style.grow = share.max(0.0);
+        self
+    }
+
+    /// Whether a switch or checkbox is on, or a tab is selected. Screen
+    /// readers announce it.
+    pub fn checked(mut self, checked: bool) -> Self {
+        self.checked = Some(checked);
+        self
+    }
+
+    /// Makes the element a slider track at `value` (0 to 1). Pressing or
+    /// dragging on it, or the arrow keys when it has focus, send
+    /// `on_change(new_value)`. The element must be at least 28 logical pixels
+    /// wide, the width of the thumb.
+    pub fn on_drag(mut self, value: f32, on_change: impl Fn(f32) -> M + 'static) -> Self
+    where
+        M: 'static,
+    {
+        self.value = Some(value.clamp(0.0, 1.0));
+        self.on_drag = Some(Box::new(on_change));
         self
     }
 
