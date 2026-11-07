@@ -26,6 +26,7 @@ struct Uniforms {
     body_dark: vec4f,
     sharp: vec4f,           // sharp gain, sharp chroma: light .xy, dark .zw
     edges: vec4f,           // outline at the ends (light, dark), highlight (light, dark)
+    blend: vec4f,           // lighten/darken blend weight (light, dark), unused, unused
     shapes: array<vec4f, 16>, // center.xy, half_size.xy
     extra: array<vec4f, 16>,  // radius, appearance (0 light, 1 dark), unused, unused
 };
@@ -188,18 +189,24 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         col.b = frost(p + disp * (1.0 - f)).b;
     }
 
-    // Body: a tone curve on the frosted luminance plus a chroma gain, and a
-    // share of the unblurred backdrop (fitted to macOS).
+    // Body: a tone curve on the frosted luminance plus a chroma gain, a share
+    // of the unblurred backdrop, and a lighten or darken blend of the two
+    // (fitted to macOS).
     let app = appearance_at(p);
     let body = mix(u.body_light, u.body_dark, app);
     let sharp_mix = mix(u.sharp.xy, u.sharp.zw, app);
     let to_luma = vec3f(0.2126, 0.7152, 0.0722);
+    let blend = mix(u.blend.x, u.blend.y, app);
+    let frosted = col;
     let luma = dot(col, to_luma);
     col = vec3f(body.x + body.y * luma + body.z * luma * luma) + body.w * (col - vec3f(luma));
-    if (sharp_mix.x != 0.0 || sharp_mix.y != 0.0) {
+    if (sharp_mix.x != 0.0 || sharp_mix.y != 0.0 || blend != 0.0) {
         let s = to_gamma(backdrop_linear(p + disp, 0.0));
         let ls = dot(s, to_luma);
         col += vec3f(sharp_mix.x * ls) + sharp_mix.y * (s - vec3f(ls));
+        // Light glass takes the lighter of frost and sharp backdrop per
+        // channel, dark glass the darker.
+        col += blend * mix(max(frosted, s), min(frosted, s), app);
     }
 
     // Highlight along the inside of the top and bottom edges, fading over

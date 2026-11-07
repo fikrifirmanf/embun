@@ -129,6 +129,39 @@ fn focused_glass_brightens_the_inside_of_its_top_edge_like_macos() {
 
 // unslop-ignore TEST_WITHOUT_ASSERTION -- asserts through the assert_near helper
 #[test]
+fn clear_glass_keeps_detail_on_its_own_side_of_the_frost_like_macos() {
+    // Over 2 px stripes the 16 pt frost is flat gray, so each stripe shows how
+    // much sharp detail comes through. In the clear captures, light glass
+    // passes detail brighter than the frost about twice as strongly as darker
+    // detail (slopes 0.52 and 0.25); dark glass does the reverse, about 3.5
+    // times (0.67 and 0.19).
+    let gpu = gpu();
+    let (dark_stripe, bright_stripe, mean) = (60.0, 180.0, 120.0);
+    let mut stripes = backdrops::solid(200, 100, [0, 0, 0]);
+    for (i, px) in stripes.rgba.chunks_mut(4).enumerate() {
+        let v = if (i as u32 % 200 / 2).is_multiple_of(2) { dark_stripe } else { bright_stripe };
+        px[..3].fill(v as u8);
+    }
+    let level = 0.0;
+    for (appearance, name) in [(0.0, "light"), (1.0, "dark")] {
+        let shape = [GlassShape { center: [100.0, 50.0], half_size: [90.0, 45.0], radius: 20.0, appearance }];
+        let params = GlassParams::from_level(level, GlassLayers::default(), false);
+        let over_stripes = render_image(&gpu, &stripes, &shape, params);
+        let over_mean = render(&gpu, [mean as u8; 3], &shape, params);
+        let base = over_mean(100, 50)[1] as f32;
+        // Pixel 100 sits on a dark stripe, pixel 102 on a bright one.
+        let toward_dark = (base - over_stripes(100, 50)[1] as f32) / (mean - dark_stripe);
+        let toward_bright = (over_stripes(102, 50)[1] as f32 - base) / (bright_stripe - mean);
+        let (kept, flattened, at_least) =
+            if appearance == 0.0 { (toward_bright, toward_dark, 1.5) } else { (toward_dark, toward_bright, 2.5) };
+        assert!(
+            kept > at_least * flattened && flattened > 0.0,
+            "{name} glass passed detail with slopes {toward_bright:.2} (brighter) and {toward_dark:.2} (darker)"
+        );
+    }
+}
+
+#[test]
 fn close_shapes_merge_only_when_merging_is_on() {
     let gpu = gpu();
     // Two circles with a 6 px gap between them, centered on (123, 50).

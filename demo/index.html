@@ -202,12 +202,12 @@ pre code { background: none; padding: 0; font-size: inherit; }
       <ul>
         <li>The workspace lives at <code>~/Development/embun</code> with <code>embun-render</code>, <code>embun-motion</code>, <code>embun</code> and <code>embun-web</code>.</li>
         <li><code>embun-render</code> draws frost, lensing, the macOS outline and merging, with rim light and shadow as optional extras. It renders natively on Metal and in the browser through WebAssembly.</li>
-        <li>Phase 0 is done for basic shapes. A capture app puts real macOS 27.0.1 glass over our test backdrops at three slider positions, in light and dark. The first 18 captures turned out to show a window without focus, which looks different, so focused windows were captured again. The shader is fitted to both: average error is 1.0–2.5 out of 255 for focused glass and 0.5–1.1 without focus. Corners use Apple's continuous curve, and merged shapes match the macOS neck within a pixel.</li>
-        <li>Focused glass at the clear setting is mostly the sharp backdrop, bent near the edge, with a thin highlight along the top and bottom. The slider keeps the same 16 pt blur and changes how much of the sharp backdrop shows through.</li>
+        <li>Phase 0 is done for basic shapes. A capture app puts real macOS 27.0.1 glass over our test backdrops at three slider positions, in light and dark. The first 18 captures turned out to show a window without focus, which looks different, so focused windows were captured again. The shader is fitted to both: average error is 0.9–1.8 out of 255 for focused glass and 0.5–1.1 without focus. Corners use Apple's continuous curve, and merged shapes match the macOS neck within a pixel.</li>
+        <li>Focused glass at the clear setting is mostly the sharp backdrop, bent near the edge, with a thin highlight along the top and bottom. The slider keeps the same 16 pt blur and changes how much of the sharp backdrop shows through. Light glass lets detail brighter than the frost through about twice as strongly as darker detail; dark glass does the reverse.</li>
         <li><code>embun-motion</code> has springs with SwiftUI-style response and damping settings.</li>
-        <li>20 tests pass. Eight render real frames on the GPU: they check glass colors, the outline and the edge highlight against pixels read from the macOS captures, and guard against a seam where shapes merge.</li>
+        <li>21 tests pass. Nine render real frames on the GPU: they check glass colors, the outline, the edge highlight and how detail shows through against the macOS captures, and guard against a seam where shapes merge.</li>
         <li>Real glass buttons are captured too: small and regular buttons are rounded rectangles with a radius of a quarter of their height, larger ones are capsules.</li>
-        <li>Next: the exact shape of the bending at the rim, which is most of the error left at the clear setting; tinted glass for prominent buttons; then toolbars, sidebars and menus.</li>
+        <li>Next: tinted glass for prominent buttons, then toolbars, sidebars and menus.</li>
       </ul>
     </section>
 

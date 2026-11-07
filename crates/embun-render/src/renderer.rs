@@ -64,6 +64,8 @@ struct Uniforms {
     sharp: [f32; 4],
     /// outline at the ends (light, dark), highlight (light, dark)
     edges: [f32; 4],
+    /// blend weight, light then dark; two unused
+    blend: [f32; 4],
     shapes: [[f32; 4]; MAX_SHAPES],
     extra: [[f32; 4]; MAX_SHAPES],
 }
@@ -443,6 +445,7 @@ impl GlassRenderer {
         out.body_dark = body(p.dark);
         out.sharp = [p.light.sharp_gain, p.light.sharp_chroma, p.dark.sharp_gain, p.dark.sharp_chroma];
         out.edges = [p.outline_ends[0], p.outline_ends[1], p.highlight[0], p.highlight[1]];
+        out.blend = [p.light.blend, p.dark.blend, 0.0, 0.0];
         out.output_gamma = if self.output_gamma { 1.0 } else { 0.0 };
         out.bevel = p.bevel.max(0.01);
         out

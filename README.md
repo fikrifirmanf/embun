@@ -18,10 +18,10 @@ Captures cover the three transparency settings (clear, middle, tinted), light an
 
 | Window | Clear | Middle | Tinted |
 |---|---|---|---|
-| Focused | 2.5 | 1.8 | 1.0 |
+| Focused | 1.8 | 1.4 | 0.9 |
 | Without focus | 1.1 | 0.9 | 0.5 |
 
-Each number is the average per-pixel difference, out of 255. Most of what is left is at the clear setting, where macOS bends the backdrop near the edge in a shape Embun only approximates.
+Each number is the average per-pixel difference, out of 255. Most of what is left sits in the one-pixel ring at the edge of each shape and over very busy backdrops such as random noise.
 
 Real glass buttons are captured too, but not yet toolbars, sidebars or menus.
 
