@@ -6,7 +6,13 @@
 
 - Controls: `switch`, `checkbox`, `slider` and `segmented`. Switches and checkboxes announce their on or off state to screen readers, segments announce which one is selected, and sliders report a value that screen readers can increment, decrement or set.
 - `Element::on_drag` makes any element a slider: pressing or dragging it, or the arrow keys, Home and End when it has focus, send a position from 0 to 1. Also `Element::checked`, `Element::grow_by` and the roles `Switch`, `Checkbox`, `Tab`, `TabList` and `Slider`.
-- The `controls` example shows them all.
+- `text_area`: a multi-line text field that wraps, starts a new line on Return, moves between lines with Up and Down, and scrolls to keep the caret in view. Screen readers see it as a multi-line text input.
+- Option-Left and Option-Right move by word, Option-Backspace deletes a word, and Command-Up and Command-Down go to the start and end of the text. New `Key` variants: `Up`, `Down`, `SelectUp`, `SelectDown`, `WordLeft`, `WordRight`, `SelectWordLeft`, `SelectWordRight`, `DeleteWordBack`, `DocStart` and `DocEnd`.
+- The `controls` and `notes` examples.
+
+### Changed
+
+- Home and End go to the start and end of the line. In a single-line field that is the whole text, as before.
 
 ### Fixed
 

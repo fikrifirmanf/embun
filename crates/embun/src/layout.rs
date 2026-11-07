@@ -301,6 +301,22 @@ fn measure<M>(
     }
 }
 
+/// Where the text of a field starts (window coordinates, after `scroll`) and
+/// the width it wraps at; `None` for a single line. A single line is
+/// centered vertically; a text area starts at its top padding.
+pub(crate) fn field_geometry(rect: Rect4, style: &crate::element::Style, text: &TextStyle, multiline: bool, scroll: [f32; 2]) -> ([f32; 2], Option<f32>) {
+    let [top, right, bottom, left] = style.padding;
+    let inner_w = (rect[2] - left - right).max(1.0);
+    let inner_h = rect[3] - top - bottom;
+    let x = rect[0] + left - scroll[0];
+    if multiline {
+        ([x, rect[1] + top - scroll[1]], Some(inner_w))
+    } else {
+        let line = text.size * text.line_height;
+        ([x, rect[1] + top + (inner_h - line) / 2.0], None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -55,19 +55,22 @@ impl Scene {
     }
 
     /// How far the text of field `id` is shifted left to keep its caret visible.
-    pub(crate) fn caret_scroll(&self, id: u64) -> f32 {
-        self.caret.filter(|c| c.id == id).map_or(0.0, |c| c.scroll)
+    pub(crate) fn caret_scroll(&self, id: u64) -> [f32; 2] {
+        self.caret.as_ref().filter(|c| c.id == id).map_or([0.0; 2], |c| c.scroll)
     }
 }
 
 /// The caret and selection of the text field being edited, in logical
 /// pixels from the start of its text.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Caret {
     pub id: u64,
-    pub x: f32,
-    pub selection: Option<(f32, f32)>,
-    pub scroll: f32,
+    /// Top-left of the caret's line.
+    pub pos: [f32; 2],
+    /// Rectangles of the selected text, one per line.
+    pub selection: Vec<[f32; 4]>,
+    /// How far the text is shifted left and up to keep the caret visible.
+    pub scroll: [f32; 2],
 }
 
 /// Press and hover progress of a glass control, each 0 to 1.
@@ -92,7 +95,7 @@ pub(crate) fn build<M>(
     focused: Option<u64>,
     caret: Option<&Caret>,
 ) -> Scene {
-    let mut scene = Scene { background: Some(theme.background()), caret: caret.copied(), ..Default::default() };
+    let mut scene = Scene { background: Some(theme.background()), caret: caret.cloned(), ..Default::default() };
     let mut next_group = 1u32 << 16;
     // Borders draw after the element's children, so a child that fills the
     // element (an image in a selected tile) cannot cover them. `end[i]` is
@@ -161,7 +164,7 @@ pub(crate) fn build<M>(
                 clip: node.clip,
             }),
             Kind::Image(image) => layer.push(Prim::Image { image: image.clone(), rect: node.rect, radius: s.radius, clip: node.clip }),
-            Kind::Input { value, placeholder } => {
+            Kind::Input { value, placeholder, multiline } => {
                 let [x, y, w, h] = node.rect;
                 let fill = if node.on_glass.is_some() { theme.label().with_alpha(0.06) } else { theme.surface() };
                 layer.push(Prim::Rect {
@@ -173,29 +176,30 @@ pub(crate) fn build<M>(
                     clip: node.clip,
                 });
                 let line = node.text.size * node.text.line_height;
-                let inner = [x + s.padding[3], y, w - s.padding[1] - s.padding[3], h];
+                let [pt, pr, pb, pl] = s.padding;
+                let inner = [x + pl, y + pt, w - pl - pr, h - pt - pb];
                 let clip = crate::layout::intersect(node.clip, inner);
                 let caret = caret.filter(|c| c.id == node.id);
-                let left = inner[0] - caret.map_or(0.0, |c| c.scroll);
-                let top = y + (h - line) / 2.0;
-                if let Some((a, b)) = caret.and_then(|c| c.selection) {
+                let scroll = caret.map_or([0.0; 2], |c| c.scroll);
+                let (origin, wrap) = crate::layout::field_geometry(node.rect, s, &node.text, *multiline, scroll);
+                for r in caret.map_or(&[][..], |c| &c.selection[..]) {
                     let sel = theme.accent().with_alpha(0.3);
-                    layer.push(Prim::Rect { rect: [left + a, top, b - a, line], radius: 0.0, top: sel, bottom: sel, border: None, clip });
+                    layer.push(Prim::Rect { rect: [origin[0] + r[0], origin[1] + r[1], r[2], r[3]], radius: 0.0, top: sel, bottom: sel, border: None, clip });
                 }
                 let (shown, color) = if value.is_empty() { (placeholder, theme.secondary_label()) } else { (value, node.color) };
                 if !shown.is_empty() {
                     layer.push(Prim::Text {
                         text: shown.clone(),
                         style: node.text.clone(),
-                        width: f32::INFINITY,
-                        origin: [left, top],
+                        width: wrap.unwrap_or(f32::INFINITY),
+                        origin,
                         color,
                         clip,
                     });
                 }
-                if let Some(c) = caret.filter(|c| c.selection.is_none()) {
+                if let Some(c) = caret.filter(|c| c.selection.is_empty()) {
                     let ink = theme.accent();
-                    layer.push(Prim::Rect { rect: [left + c.x, top + 1.0, 1.5, line - 2.0], radius: 0.0, top: ink, bottom: ink, border: None, clip });
+                    layer.push(Prim::Rect { rect: [origin[0] + c.pos[0], origin[1] + c.pos[1] + 1.0, 1.5, line - 2.0], radius: 0.0, top: ink, bottom: ink, border: None, clip });
                 }
             }
             Kind::Div => {}

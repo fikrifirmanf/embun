@@ -261,20 +261,28 @@ impl<A: App + 'static> ApplicationHandler<accesskit_winit::Event> for Shell<A> {
                 let shift = s.modifiers.shift_key();
                 // Command on macOS, Control elsewhere.
                 let command = s.modifiers.super_key() || s.modifiers.control_key();
+                let alt = s.modifiers.alt_key();
                 let editing = s.ui.is_editing();
                 let pick = |plain: Key, selecting: Key| Some(if shift { selecting } else { plain });
                 let key = match &event.logical_key {
                     WinitKey::Named(NamedKey::Tab) => pick(Key::Tab, Key::ShiftTab),
                     WinitKey::Named(NamedKey::Escape) => Some(Key::Escape),
                     WinitKey::Named(NamedKey::Enter | NamedKey::Space) if !editing => Some(Key::Activate),
+                    WinitKey::Named(NamedKey::Backspace) if editing && alt => Some(Key::DeleteWordBack),
                     WinitKey::Named(NamedKey::Backspace) if editing => Some(Key::Backspace),
                     WinitKey::Named(NamedKey::Delete) if editing => Some(Key::Delete),
                     WinitKey::Named(NamedKey::ArrowLeft) if editing && command => pick(Key::Home, Key::SelectHome),
                     WinitKey::Named(NamedKey::ArrowRight) if editing && command => pick(Key::End, Key::SelectEnd),
+                    WinitKey::Named(NamedKey::ArrowUp) if editing && command => Some(Key::DocStart),
+                    WinitKey::Named(NamedKey::ArrowDown) if editing && command => Some(Key::DocEnd),
+                    WinitKey::Named(NamedKey::ArrowLeft) if editing && alt => pick(Key::WordLeft, Key::SelectWordLeft),
+                    WinitKey::Named(NamedKey::ArrowRight) if editing && alt => pick(Key::WordRight, Key::SelectWordRight),
                     WinitKey::Named(NamedKey::ArrowLeft) if editing => pick(Key::Left, Key::SelectLeft),
                     WinitKey::Named(NamedKey::ArrowRight) if editing => pick(Key::Right, Key::SelectRight),
-                    WinitKey::Named(NamedKey::Home | NamedKey::ArrowUp) if editing => pick(Key::Home, Key::SelectHome),
-                    WinitKey::Named(NamedKey::End | NamedKey::ArrowDown) if editing => pick(Key::End, Key::SelectEnd),
+                    WinitKey::Named(NamedKey::ArrowUp) if editing => pick(Key::Up, Key::SelectUp),
+                    WinitKey::Named(NamedKey::ArrowDown) if editing => pick(Key::Down, Key::SelectDown),
+                    WinitKey::Named(NamedKey::Home) if editing => pick(Key::Home, Key::SelectHome),
+                    WinitKey::Named(NamedKey::End) if editing => pick(Key::End, Key::SelectEnd),
                     WinitKey::Character(c) if editing && command && c.eq_ignore_ascii_case("a") => Some(Key::SelectAll),
                     WinitKey::Character(c) if editing && command => {
                         clipboard(&mut s.clipboard, c, &mut s.ui);

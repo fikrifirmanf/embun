@@ -39,9 +39,9 @@ pub enum Key {
     Delete,
     Left,
     Right,
-    /// Start of the field.
+    /// Start of the line.
     Home,
-    /// End of the field.
+    /// End of the line.
     End,
     /// Left, Right, Home and End with Shift: extend the selection.
     SelectLeft,
@@ -49,6 +49,21 @@ pub enum Key {
     SelectHome,
     SelectEnd,
     SelectAll,
+    /// Up and Down: between lines of a text area; to the start or end of a single-line field.
+    Up,
+    Down,
+    SelectUp,
+    SelectDown,
+    /// Option-Left and Option-Right: by word.
+    WordLeft,
+    WordRight,
+    SelectWordLeft,
+    SelectWordRight,
+    /// Option-Backspace: deletes the word before the caret.
+    DeleteWordBack,
+    /// Command-Up and Command-Down: start and end of the whole text.
+    DocStart,
+    DocEnd,
 }
 
 /// The text field being edited: cursor and the other end of the selection,
@@ -305,19 +320,19 @@ impl<A: App> Ui<A> {
             self.highlight.iter().map(|(&id, (press, hover))| (id, Highlight { press: press.value, hover: hover.value })).collect();
         let caret = self.edit.and_then(|edit| {
             let node = nodes.iter().find(|n| n.id == edit.id)?;
-            let Kind::Input { value, .. } = &node.el.kind else { return None };
+            let Kind::Input { value, multiline, .. } = &node.el.kind else { return None };
             let cursor = edit.cursor.min(value.len());
             let anchor = edit.anchor.min(value.len());
-            let mut x = |i: usize| self.text.measure(&value[..i], &node.text, None)[0];
-            let (caret, other) = (x(cursor), x(anchor));
-            let inner = node.rect[2] - node.el.style.padding[1] - node.el.style.padding[3];
-            Some(scene::Caret {
-                id: edit.id,
-                x: caret,
-                selection: (cursor != anchor).then(|| (caret.min(other), caret.max(other))),
-                // Shift the text left so the caret stays inside the field.
-                scroll: (caret - inner + 2.0).max(0.0),
-            })
+            let (_, wrap) = layout::field_geometry(node.rect, &node.el.style, &node.text, *multiline, [0.0; 2]);
+            let pos = self.text.caret(value, &node.text, wrap, cursor);
+            let selection =
+                if cursor != anchor { self.text.selection_rects(value, &node.text, wrap, cursor.min(anchor), cursor.max(anchor)) } else { Vec::new() };
+            let [pad_top, pad_right, pad_bottom, pad_left] = node.el.style.padding;
+            let (inner_w, inner_h) = (node.rect[2] - pad_left - pad_right, node.rect[3] - pad_top - pad_bottom);
+            let line = node.text.size * node.text.line_height;
+            // Shift the text so the caret stays inside the field.
+            let scroll = if *multiline { [0.0, (pos[1] + line - inner_h).max(0.0)] } else { [(pos[0] - inner_w + 2.0).max(0.0), 0.0] };
+            Some(scene::Caret { id: edit.id, pos, selection, scroll })
         });
         self.scene = scene::build(&nodes, &self.theme, &highlight, self.focused, caret.as_ref());
         true
@@ -366,7 +381,7 @@ impl<A: App> Ui<A> {
                 node.add_action(accesskit::Action::Increment);
                 node.add_action(accesskit::Action::Decrement);
             }
-            if a.role == accesskit::Role::TextInput {
+            if is_text_input(a.role) {
                 node.add_action(accesskit::Action::SetValue);
                 node.add_action(accesskit::Action::ReplaceSelectedText);
             }
@@ -407,7 +422,7 @@ impl<A: App> Ui<A> {
                 };
                 self.set_slider(id, next);
             }
-            accesskit::Action::SetValue | accesskit::Action::ReplaceSelectedText if node.role == accesskit::Role::TextInput => {
+            accesskit::Action::SetValue | accesskit::Action::ReplaceSelectedText if is_text_input(node.role) => {
                 let Some(accesskit::ActionData::Value(text)) = &request.data else { return };
                 if self.focused != Some(id) {
                     self.focus(Some(id));
@@ -435,12 +450,12 @@ impl<A: App> Ui<A> {
     }
 
     /// The value and change handler of the text field `id`.
-    fn input(&self, id: u64) -> Option<(String, &OnChange<A::Message>)> {
+    fn input(&self, id: u64) -> Option<(String, &OnChange<A::Message>, bool)> {
         let view = self.view.as_ref()?;
         let nodes = layout::flatten(view, &self.theme);
         let node = nodes.iter().find(|n| n.id == id)?;
         match (&node.el.kind, node.el.on_input.as_deref()) {
-            (Kind::Input { value, .. }, Some(on_change)) => Some((value.clone(), on_change)),
+            (Kind::Input { value, multiline, .. }, Some(on_change)) => Some((value.clone(), on_change, *multiline)),
             _ => None,
         }
     }
@@ -449,7 +464,7 @@ impl<A: App> Ui<A> {
     pub fn selected_text(&mut self) -> Option<String> {
         self.ensure_view();
         let edit = self.edit?;
-        let (value, _) = self.input(edit.id)?;
+        let (value, ..) = self.input(edit.id)?;
         let (start, end) = (edit.cursor.min(edit.anchor).min(value.len()), edit.cursor.max(edit.anchor).min(value.len()));
         (start != end).then(|| value[start..end].to_owned())
     }
@@ -467,8 +482,12 @@ impl<A: App> Ui<A> {
     /// Replaces the selection in the focused text field with `text`, as
     /// typing, pasting or an input method does.
     pub fn insert_text(&mut self, text: &str) {
-        // One line: pasted line breaks become spaces, other control characters go.
-        let text: String = text.chars().map(|c| if c == '\n' { ' ' } else { c }).filter(|c| !c.is_control()).collect();
+        self.ensure_view();
+        let multiline = self.edit.and_then(|e| self.input(e.id)).is_some_and(|(_, _, multiline)| multiline);
+        // Line breaks stay in a text area and become spaces in a single line;
+        // other control characters go.
+        let text = text.replace("\r\n", "\n").replace('\r', "\n");
+        let text: String = text.chars().map(|c| if c == '\n' && !multiline { ' ' } else { c }).filter(|c| *c == '\n' || !c.is_control()).collect();
         if text.is_empty() {
             return;
         }
@@ -484,7 +503,7 @@ impl<A: App> Ui<A> {
     fn edit_value(&mut self, change: impl FnOnce(&mut String, usize, usize) -> usize) {
         self.ensure_view();
         let Some(edit) = self.edit else { return };
-        let Some((mut value, on_change)) = self.input(edit.id) else { return };
+        let Some((mut value, on_change, _)) = self.input(edit.id) else { return };
         let (start, end) = (edit.cursor.min(edit.anchor).min(value.len()), edit.cursor.max(edit.anchor).min(value.len()));
         let before = value.clone();
         let cursor = change(&mut value, start, end);
@@ -499,23 +518,55 @@ impl<A: App> Ui<A> {
     fn move_cursor(&mut self, key: Key) {
         self.ensure_view();
         let Some(edit) = self.edit else { return };
-        let Some((value, _)) = self.input(edit.id) else { return };
-        let cursor = edit.cursor.min(value.len());
+        let Some((value, _, multiline)) = self.input(edit.id) else { return };
+        let len = value.len();
+        let cursor = edit.cursor.min(len);
         let prev = value[..cursor].char_indices().next_back().map_or(0, |(i, _)| i);
         let next = value[cursor..].chars().next().map_or(cursor, |c| cursor + c.len_utf8());
+        let line_start = value[..cursor].rfind('\n').map_or(0, |i| i + 1);
+        let line_end = value[cursor..].find('\n').map_or(len, |i| cursor + i);
         let (start, end) = (edit.cursor.min(edit.anchor), edit.cursor.max(edit.anchor));
         let (cursor, anchor) = match key {
             Key::Left if start != end => (start, start),
             Key::Right if start != end => (end, end),
             Key::Left => (prev, prev),
             Key::Right => (next, next),
-            Key::Home => (0, 0),
-            Key::End => (value.len(), value.len()),
+            Key::WordLeft if start != end => (start, start),
+            Key::WordRight if start != end => (end, end),
+            Key::WordLeft => (word_left(&value, cursor), word_left(&value, cursor)),
+            Key::WordRight => (word_right(&value, cursor), word_right(&value, cursor)),
+            Key::SelectWordLeft => (word_left(&value, cursor), edit.anchor),
+            Key::SelectWordRight => (word_right(&value, cursor), edit.anchor),
+            Key::Home => (line_start, line_start),
+            Key::End => (line_end, line_end),
+            Key::DocStart => (0, 0),
+            Key::DocEnd => (len, len),
             Key::SelectLeft => (prev, edit.anchor),
             Key::SelectRight => (next, edit.anchor),
-            Key::SelectHome => (0, edit.anchor),
-            Key::SelectEnd => (value.len(), edit.anchor),
-            Key::SelectAll => (value.len(), 0),
+            Key::SelectHome => (line_start, edit.anchor),
+            Key::SelectEnd => (line_end, edit.anchor),
+            Key::SelectAll => (len, 0),
+            Key::Up | Key::Down | Key::SelectUp | Key::SelectDown => {
+                let down = matches!(key, Key::Down | Key::SelectDown);
+                let target = if !multiline {
+                    if down { len } else { 0 }
+                } else {
+                    let Some((style, wrap)) = self.field_text(edit.id) else { return };
+                    let [x, y] = self.text.caret(&value, &style, wrap, cursor);
+                    let line = style.size * style.line_height;
+                    let total = self.text.measure(&value, &style, wrap)[1];
+                    if down && y + line * 1.5 > total + 0.5 {
+                        len
+                    } else if down {
+                        self.text.hit(&value, &style, wrap, [x, y + line * 1.5])
+                    } else if y < line * 0.5 {
+                        0
+                    } else {
+                        self.text.hit(&value, &style, wrap, [x, y - line * 0.5])
+                    }
+                };
+                (target, if matches!(key, Key::SelectUp | Key::SelectDown) { edit.anchor } else { target })
+            }
             _ => return,
         };
         self.edit = Some(Edit { cursor, anchor, ..edit });
@@ -523,23 +574,29 @@ impl<A: App> Ui<A> {
     }
 
     /// The byte offset in the field `id` closest to the window x position.
-    fn offset_at(&mut self, id: u64, x: f32) -> usize {
+    fn offset_at(&mut self, id: u64, p: [f32; 2]) -> usize {
         self.ensure_view();
-        let Some((value, _)) = self.input(id) else { return 0 };
-        let Some(target) = self.targets.iter().find(|t| t.id == id) else { return value.len() };
+        let Some((value, _, multiline)) = self.input(id) else { return 0 };
+        let Some(rect) = self.targets.iter().find(|t| t.id == id).map(|t| t.rect) else { return value.len() };
         let view = self.view.as_ref().expect("view");
         let nodes = layout::flatten(view, &self.theme);
         let Some(node) = nodes.iter().find(|n| n.id == id) else { return value.len() };
-        let local = x - target.rect[0] - node.el.style.padding[3] + self.scene.caret_scroll(id);
+        let (origin, wrap) = layout::field_geometry(rect, &node.el.style, &node.text, multiline, self.scene.caret_scroll(id));
         let style = node.text.clone();
-        let mut best = (0, f32::MAX);
-        for (i, _) in value.char_indices().chain([(value.len(), ' ')]) {
-            let d = (self.text.measure(&value[..i], &style, None)[0] - local).abs();
-            if d < best.1 {
-                best = (i, d);
-            }
-        }
-        best.0
+        // A single line is one row, wherever in it the click lands.
+        let y = if multiline { p[1] - origin[1] } else { style.size * style.line_height / 2.0 };
+        self.text.hit(&value, &style, wrap, [p[0] - origin[0], y])
+    }
+
+    /// How the text of field `id` is set and wrapped.
+    fn field_text(&mut self, id: u64) -> Option<(crate::text::TextStyle, Option<f32>)> {
+        let rect = self.targets.iter().find(|t| t.id == id)?.rect;
+        let view = self.view.as_ref()?;
+        let nodes = layout::flatten(view, &self.theme);
+        let node = nodes.iter().find(|n| n.id == id)?;
+        let Kind::Input { multiline, .. } = &node.el.kind else { return None };
+        let (_, wrap) = layout::field_geometry(rect, &node.el.style, &node.text, *multiline, [0.0; 2]);
+        Some((node.text.clone(), wrap))
     }
 
     fn focus(&mut self, id: Option<u64>) {
@@ -547,7 +604,7 @@ impl<A: App> Ui<A> {
         self.focused = id;
         self.edit = None;
         if let Some(id) = id
-            && let Some((value, _)) = self.input(id)
+            && let Some((value, ..)) = self.input(id)
         {
             self.edit = Some(Edit { id, cursor: value.len(), anchor: 0 });
         }
@@ -666,7 +723,7 @@ impl<A: App> Ui<A> {
             if self.focused != Some(id) {
                 self.focus(Some(id));
             }
-            let offset = self.offset_at(id, p[0]);
+            let offset = self.offset_at(id, p);
             self.edit = Some(Edit { id, cursor: offset, anchor: offset });
             self.dirty = true;
             return;
@@ -767,6 +824,11 @@ impl<A: App> Ui<A> {
                     start
                 }
             }),
+            Key::DeleteWordBack => self.edit_value(|value, start, end| {
+                let from = if start != end { start } else { word_left(value, start) };
+                value.replace_range(from..end, "");
+                from
+            }),
             Key::Delete => self.edit_value(|value, start, end| {
                 if start != end {
                     value.replace_range(start..end, "");
@@ -814,15 +876,60 @@ impl<A: App> Ui<A> {
     }
 }
 
+fn is_text_input(role: accesskit::Role) -> bool {
+    matches!(role, accesskit::Role::TextInput | accesskit::Role::MultilineTextInput)
+}
+
+/// What a word is for Option-arrow movement: spaces, letters and digits, or punctuation.
+fn char_class(c: char) -> u8 {
+    if c.is_whitespace() {
+        0
+    } else if c.is_alphanumeric() || c == '_' {
+        1
+    } else {
+        2
+    }
+}
+
+/// The start of the word before byte `at`, skipping spaces first.
+fn word_left(text: &str, at: usize) -> usize {
+    let mut i = at.min(text.len());
+    let before = |i: usize| text[..i].chars().next_back();
+    while let Some(c) = before(i).filter(|&c| char_class(c) == 0) {
+        i -= c.len_utf8();
+    }
+    if let Some(class) = before(i).map(char_class) {
+        while let Some(c) = before(i).filter(|&c| char_class(c) == class) {
+            i -= c.len_utf8();
+        }
+    }
+    i
+}
+
+/// The end of the word after byte `at`, skipping spaces first.
+fn word_right(text: &str, at: usize) -> usize {
+    let mut i = at.min(text.len());
+    let after = |i: usize| text[i..].chars().next();
+    while let Some(c) = after(i).filter(|&c| char_class(c) == 0) {
+        i += c.len_utf8();
+    }
+    if let Some(class) = after(i).map(char_class) {
+        while let Some(c) = after(i).filter(|&c| char_class(c) == class) {
+            i += c.len_utf8();
+        }
+    }
+    i
+}
+
 fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
     use accesskit::Role as R;
     let el = n.el;
     let (role, label, value) = match &el.kind {
         Kind::Text(text) => (R::Label, Some(text.clone()), None),
         Kind::Image(_) => (R::Image, el.label.clone(), None),
-        Kind::Input { value, placeholder } => {
+        Kind::Input { value, placeholder, multiline } => {
             let label = el.label.clone().or_else(|| (!placeholder.is_empty()).then(|| placeholder.clone()));
-            (R::TextInput, label, Some(value.clone()))
+            (if *multiline { R::MultilineTextInput } else { R::TextInput }, label, Some(value.clone()))
         }
         Kind::Div => {
             let role = match el.role {
@@ -1086,11 +1193,11 @@ mod tests {
         assert_eq!(texts(ui.scene()), ["Name"]);
         assert!(ui.scene().caret.is_none());
         ui.key(Key::Tab);
-        let caret = ui.scene().caret.expect("caret while editing");
-        assert_eq!((caret.x, caret.selection), (0.0, None));
+        let caret = ui.scene().caret.clone().expect("caret while editing");
+        assert_eq!((caret.pos[0], caret.selection.len()), (0.0, 0));
         ui.insert_text("Hi");
-        let caret = ui.scene().caret.expect("caret");
-        assert!(caret.x > 8.0, "caret should move past the text, at {}", caret.x);
+        let caret = ui.scene().caret.clone().expect("caret");
+        assert!(caret.pos[0] > 8.0, "caret should move past the text, at {}", caret.pos[0]);
         assert_eq!(texts(ui.scene()), ["Hi"]);
     }
 
@@ -1465,5 +1572,161 @@ mod tests {
         }
         let mut ui = Ui::new(Bad, Theme::default(), [300.0, 100.0]);
         assert!(!ui.scene().glass.is_empty(), "the thumb is still drawn");
+    }
+
+    struct Notes {
+        text: String,
+    }
+
+    impl App for Notes {
+        type Message = String;
+        fn update(&mut self, m: String) {
+            self.text = m;
+        }
+        fn view(&self, _: &Theme) -> Element<String> {
+            column().p_4().child(crate::text_area(self.text.clone(), |t| t).key("notes").w(200.0).h(96.0))
+        }
+    }
+
+    /// A focused text area holding `text`, with the caret at the end.
+    fn notes(text: &str) -> Ui<Notes> {
+        let mut ui = Ui::new(Notes { text: text.into() }, Theme::default(), [300.0, 200.0]);
+        ui.update();
+        ui.key(Key::Tab);
+        ui.key(Key::DocEnd);
+        ui
+    }
+
+    /// Types `marker` at the caret and returns the text with it, to see where the caret is.
+    fn caret_in(ui: &mut Ui<Notes>, marker: &str) -> String {
+        ui.insert_text(marker);
+        let text = ui.app().text.clone();
+        ui.key(Key::Backspace);
+        text
+    }
+
+    #[test]
+    fn return_starts_a_new_line_in_a_text_area_but_not_in_a_single_line_field() {
+        let mut ui = notes("ab");
+        ui.insert_text("\ncd\r\nef\rgh");
+        assert_eq!(ui.app().text, "ab\ncd\nef\ngh");
+        let mut ui = form("");
+        ui.update();
+        ui.key(Key::Tab);
+        ui.insert_text("a\nb");
+        assert_eq!(ui.app().name, "a b");
+    }
+
+    #[test]
+    fn up_and_down_move_between_lines_keeping_the_column() {
+        let mut ui = notes("abcd\nef\nghijkl");
+        // The caret is at the end of "ghijkl", column 6. Up lands on the end of the shorter "ef".
+        ui.key(Key::Up);
+        assert_eq!(caret_in(&mut ui, "|"), "abcd\nef|\nghijkl");
+        // Up again: column 2 of "abcd", roughly under where it was.
+        ui.key(Key::Up);
+        assert_eq!(caret_in(&mut ui, "|"), "ab|cd\nef\nghijkl");
+        // Up on the first line goes to the start, Down on the last goes to the end.
+        ui.key(Key::Up);
+        assert_eq!(caret_in(&mut ui, "|"), "|abcd\nef\nghijkl");
+        ui.key(Key::Down);
+        assert_eq!(caret_in(&mut ui, "|"), "abcd\n|ef\nghijkl");
+        ui.key(Key::Down);
+        assert_eq!(caret_in(&mut ui, "|"), "abcd\nef\n|ghijkl");
+        ui.key(Key::Down);
+        assert_eq!(caret_in(&mut ui, "|"), "abcd\nef\nghijkl|");
+    }
+
+    #[test]
+    fn down_keeps_the_column_too() {
+        // Identical lines, so the same column is the same x in a proportional font.
+        let mut ui = notes("abcd\nabcd\nabcd");
+        ui.key(Key::DocStart);
+        ui.key(Key::Right);
+        ui.key(Key::Right);
+        ui.key(Key::Down);
+        assert_eq!(caret_in(&mut ui, "|"), "abcd\nab|cd\nabcd");
+        ui.key(Key::Down);
+        assert_eq!(caret_in(&mut ui, "|"), "abcd\nabcd\nab|cd");
+    }
+
+    #[test]
+    fn selecting_with_up_and_down_covers_the_lines_between() {
+        let mut ui = notes("one\ntwo\nthree");
+        ui.key(Key::SelectUp);
+        ui.key(Key::SelectUp);
+        assert_eq!(ui.scene().caret.as_ref().expect("caret").selection.len(), 3, "a selection over three lines has three rectangles");
+        // The caret went up to the end of "one" (column 3 of "three" clamps there); typing replaces the rest.
+        ui.insert_text("X");
+        assert_eq!(ui.app().text, "oneX");
+    }
+
+    #[test]
+    fn home_and_end_go_to_the_ends_of_the_line_and_command_up_down_to_the_ends_of_the_text() {
+        let mut ui = notes("abc\ndef\nghi");
+        ui.key(Key::Up);
+        ui.key(Key::End);
+        assert_eq!(caret_in(&mut ui, "|"), "abc\ndef|\nghi");
+        ui.key(Key::Home);
+        assert_eq!(caret_in(&mut ui, "|"), "abc\n|def\nghi");
+        ui.key(Key::DocStart);
+        assert_eq!(caret_in(&mut ui, "|"), "|abc\ndef\nghi");
+        ui.key(Key::DocEnd);
+        assert_eq!(caret_in(&mut ui, "|"), "abc\ndef\nghi|");
+    }
+
+    #[test]
+    fn option_arrows_move_by_word_and_option_backspace_deletes_one() {
+        let mut ui = notes("hello big-world  again");
+        ui.key(Key::WordLeft);
+        assert_eq!(caret_in(&mut ui, "|"), "hello big-world  |again");
+        ui.key(Key::WordLeft);
+        assert_eq!(caret_in(&mut ui, "|"), "hello big-|world  again", "punctuation is a word of its own: spaces then the word");
+        ui.key(Key::WordRight);
+        assert_eq!(caret_in(&mut ui, "|"), "hello big-world|  again");
+        ui.key(Key::SelectWordLeft);
+        ui.insert_text("W");
+        assert_eq!(ui.app().text, "hello big-W  again");
+        ui.key(Key::DeleteWordBack);
+        assert_eq!(ui.app().text, "hello big-  again");
+        // Punctuation is a word of its own, so this removes only the hyphen.
+        ui.key(Key::DeleteWordBack);
+        assert_eq!(ui.app().text, "hello big  again");
+    }
+
+    #[test]
+    fn clicking_a_line_of_a_text_area_puts_the_caret_on_that_line() {
+        let mut ui = notes("abc\ndef\nghi");
+        let field = ui.rect_of_key("notes").expect("field");
+        let line = ui.scene().caret.as_ref().expect("caret").pos[1] / 2.0;
+        // Just inside the left padding, at the middle of the second line.
+        ui.pointer_moved([field[0] + 9.0, field[1] + 6.0 + line * 1.5]);
+        ui.pointer_pressed();
+        assert_eq!(caret_in(&mut ui, "|"), "abc\n|def\nghi");
+        // Far right on the first line: its end.
+        ui.pointer_moved([field[0] + 190.0, field[1] + 6.0 + line * 0.5]);
+        ui.pointer_pressed();
+        assert_eq!(caret_in(&mut ui, "|"), "abc|\ndef\nghi");
+    }
+
+    #[test]
+    fn long_lines_wrap_and_the_view_scrolls_to_keep_the_caret_visible() {
+        let long = "word ".repeat(60);
+        let mut ui = notes(&long);
+        let caret = ui.scene().caret.clone().expect("caret");
+        assert!(caret.pos[1] > 96.0, "the end of 60 words in a 200 px field is below the 96 px field: {:?}", caret.pos);
+        assert!(caret.scroll[1] > 0.0 && caret.scroll[0] == 0.0, "scrolled down, not sideways: {:?}", caret.scroll);
+        ui.key(Key::DocStart);
+        assert_eq!(ui.scene().caret.as_ref().expect("caret").scroll, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn a_text_area_is_a_multiline_text_input_for_screen_readers() {
+        use accesskit::Role as R;
+        let mut ui = notes("a\nb");
+        let tree = ui.accessibility(1.0);
+        let node = tree.nodes.iter().find(|(_, n)| n.role() == R::MultilineTextInput).expect("a multiline input");
+        assert_eq!(node.1.value(), Some("a\nb"));
+        assert!(tree.nodes.iter().all(|(_, n)| n.role() != R::TextInput));
     }
 }

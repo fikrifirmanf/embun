@@ -61,7 +61,7 @@ Pressing or hovering a glass button only changes the glass layer, so the frost b
 - Layout: rows, columns, padding, gap, grow, alignment, wrapping, absolute positioning and vertical scrolling, through [taffy](https://crates.io/crates/taffy).
 - Text in Inter, embedded so it measures the same everywhere. Inter is under the SIL Open Font License; see `fonts/OFL.txt`.
 - Images from RGBA8 pixels.
-- `text_input`: a single-line field your app owns the value of. Typing, Backspace and Delete, arrow keys, Home and End, Shift to select, Command-A, copy, cut and paste, clicking to place the cursor, and input methods for languages such as Japanese.
+- `text_input` and `text_area`: fields your app owns the value of. Typing, Backspace and Delete, arrow keys, Option-arrows to move by word, Option-Backspace, Home and End, Command-Up and Command-Down, Shift to select, Command-A, copy, cut and paste, clicking to place the cursor, and input methods for languages such as Japanese. A text area wraps long lines, starts a new line on Return, moves between lines with Up and Down, and scrolls to keep the caret in view.
 - Controls: `button`, `icon_button`, prominent buttons, `toolbar_group` and `toolbar_item`, `sidebar`, `sidebar_item` and `sidebar_heading`. Button sizes follow the macOS 27.0.1 captures.
 - `switch`, `checkbox`, `slider` and `segmented`. Sliders take presses, drags and arrow keys, and every one of these tells screen readers its state. Put them on a solid or content background: glass over glass has nothing to frost, so keep the glass for buttons, thumbs and bars.
 - Menus and popovers: `popover`, `menu`, `menu_item`, `menu_check_item` and `menu_separator`. An overlay's glass frosts the finished window beneath it, so a menu over a toolbar shows the toolbar through it. Clicking outside or pressing Escape closes it.
@@ -70,7 +70,7 @@ Pressing or hovering a glass button only changes the glass layer, so the frost b
 - Screen readers (VoiceOver, Narrator, Orca) through [AccessKit](https://accesskit.dev): every element is in the accessibility tree with its role, name and bounds, buttons can be pressed and text fields edited from the screen reader, and keyboard focus is shared with it.
 - `snapshot` renders an app into memory, for tests and screenshots.
 
-Not there yet: multi-line text editing, moving the cursor word by word, and images from files. The cursor moves by character, so an emoji made of several characters takes several presses.
+Not there yet: images from files, dragging to select text, and scrolling a text area with the wheel. The cursor moves by character, so an emoji made of several characters takes several presses.
 
 ## Examples
 
@@ -78,6 +78,7 @@ Not there yet: multi-line text editing, moving the cursor word by word, and imag
 cargo run -p embun --example counter
 cargo run -p embun --example photos
 cargo run -p embun --example controls
+cargo run -p embun --example notes
 cargo run -p embun --example gallery -- out/   # renders PNGs, no window
 ```
 

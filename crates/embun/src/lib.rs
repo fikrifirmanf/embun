@@ -17,7 +17,7 @@ mod ui;
 mod widgets;
 
 pub use color::Color;
-pub use element::{Element, Image, Role, column, div, image, row, spacer, text, text_input};
+pub use element::{Element, Image, Role, column, div, image, row, spacer, text, text_area, text_input};
 pub use render::{Renderer, SNAPSHOT_FORMAT, snapshot};
 pub use run::{RunError, Settings, run};
 pub use text::{FONT_FAMILY, TextSystem};

@@ -36,7 +36,7 @@ pub(crate) enum Kind {
     Text(String),
     Image(Image),
     /// A single-line text field showing `value`, or `placeholder` when empty.
-    Input { value: String, placeholder: String },
+    Input { value: String, placeholder: String, multiline: bool },
 }
 
 /// What an element is, for focus, keyboard activation and screen readers.
@@ -189,13 +189,28 @@ fn node<M>(kind: Kind) -> Element<M> {
 /// Styled like a macOS text field: 28 px tall and 200 px wide unless you set
 /// `w`, `h` or `grow`.
 pub fn text_input<M: 'static>(value: impl Into<String>, on_change: impl Fn(String) -> M + 'static) -> Element<M> {
-    let mut e = node(Kind::Input { value: value.into(), placeholder: String::new() });
+    let mut e = node(Kind::Input { value: value.into(), placeholder: String::new(), multiline: false });
     e.on_input = Some(Box::new(on_change));
     e.role = Role::TextField;
     e.style.width = Length::Px(200.0);
     e.style.height = Length::Px(28.0);
     e.style.padding = [0.0, 8.0, 0.0, 8.0];
     e.style.radius = 7.0;
+    e
+}
+
+/// A multi-line text field. Return starts a new line, the text wraps at the
+/// field's width, and Up and Down move between lines. It shows `value` and
+/// reports edits like [`text_input`]; it is 240 px wide and 96 px tall unless
+/// you set `w` and `h`, and scrolls to keep the caret in view.
+pub fn text_area<M: 'static>(value: impl Into<String>, on_change: impl Fn(String) -> M + 'static) -> Element<M> {
+    let mut e = text_input(value, on_change);
+    if let Kind::Input { multiline, .. } = &mut e.kind {
+        *multiline = true;
+    }
+    e.style.width = Length::Px(240.0);
+    e.style.height = Length::Px(96.0);
+    e.style.padding = [6.0, 8.0, 6.0, 8.0];
     e
 }
 
@@ -298,7 +313,7 @@ impl<M> Element<M> {
         self
     }
 
-    /// Gray text a [`text_input`] shows while empty.
+    /// Gray text a [`text_input`] or [`text_area`] shows while empty.
     pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
         if let Kind::Input { placeholder: p, .. } = &mut self.kind {
             *p = placeholder.into();
