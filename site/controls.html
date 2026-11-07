@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controls · Embun</title>
+<meta name="description" content="Embun is a Rust UI toolkit with glass controls that match macOS 27, drawn with wgpu.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3c5 7 9 11 9 16a9 9 0 0 1-18 0c0-5 4-9 9-16z' fill='%230a60d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script>
+  try {
+    var saved = localStorage.getItem("embun-theme");
+    if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="./">Embun</a>
+  <nav class="links" aria-label="Project">
+    <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
+    <a href="https://docs.rs/embun">API reference</a>
+    <a href="https://crates.io/crates/embun">crates.io</a>
+  </nav>
+  <button class="mode" type="button" id="mode" aria-label="Switch between light and dark previews">
+    <span class="mode-light">Light</span><span class="mode-dark">Dark</span>
+  </button>
+</header>
+<div class="shell">
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html" aria-current="page">Controls</a></li></ul></nav>
+  <main id="main">
+    <h1>Controls</h1>
+    <p>These controls hold no state of their own. You pass the current value and a message, and your <code>update</code> changes the value. All of them tell screen readers their role and state.</p>
+<p>The previews sit on a plain background. Put these controls on a solid or content background, and keep glass for buttons, slider thumbs and bars.</p>
+
+<h2>Switch</h2>
+<p><code>switch(theme, on, message)</code>. The knob slides when the value changes. Give it a <code>label</code> so a screen reader can say what it turns on.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/switches-light.png" alt="Two switches, the first on and the second off" width="360" height="120"><img class="dark" src="img/switches-dark.png" alt="Two switches, the first on and the second off" width="360" height="120"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">switches</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">row</span>()
+        .<span class="f">gap_4</span>()
+        .<span class="f">items_center</span>()
+        .<span class="f">child</span>(<span class="f">switch</span>(theme, true, <span class="t">Msg</span>::<span class="t">Toggle</span>).<span class="f">label</span>(<span class="s">&quot;Wi-Fi&quot;</span>))
+        .<span class="f">child</span>(<span class="f">switch</span>(theme, false, <span class="t">Msg</span>::<span class="t">Toggle</span>).<span class="f">label</span>(<span class="s">&quot;Bluetooth&quot;</span>))
+}</code></pre></figure>
+
+<h2>Checkbox</h2>
+<p><code>checkbox(theme, label, checked, message)</code> draws the label beside the box, and pressing the label toggles it too.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/checkboxes-light.png" alt="Two checkboxes, the first checked" width="360" height="150"><img class="dark" src="img/checkboxes-dark.png" alt="Two checkboxes, the first checked" width="360" height="150"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">checkboxes</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">column</span>()
+        .<span class="f">gap_3</span>()
+        .<span class="f">child</span>(<span class="f">checkbox</span>(theme, <span class="s">&quot;I have read the terms&quot;</span>, true, <span class="t">Msg</span>::<span class="t">Toggle</span>))
+        .<span class="f">child</span>(<span class="f">checkbox</span>(theme, <span class="s">&quot;Remind me tomorrow&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Toggle</span>))
+}</code></pre></figure>
+
+<h2>Radio</h2>
+<p><code>radio(theme, label, selected, message)</code>. Build a group by calling it once per option, with <code>selected</code> true for the current one, and give each a <code>key</code>.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/radios-light.png" alt="Three radio buttons with Medium selected" width="360" height="190"><img class="dark" src="img/radios-dark.png" alt="Three radio buttons with Medium selected" width="360" height="190"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">radios</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">column</span>()
+        .<span class="f">gap_3</span>()
+        .<span class="f">child</span>(<span class="f">radio</span>(theme, <span class="s">&quot;Small&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Pick</span>(<span class="n">0</span>)).<span class="f">key</span>(<span class="s">&quot;small&quot;</span>))
+        .<span class="f">child</span>(<span class="f">radio</span>(theme, <span class="s">&quot;Medium&quot;</span>, true, <span class="t">Msg</span>::<span class="t">Pick</span>(<span class="n">1</span>)).<span class="f">key</span>(<span class="s">&quot;medium&quot;</span>))
+        .<span class="f">child</span>(<span class="f">radio</span>(theme, <span class="s">&quot;Large&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Pick</span>(<span class="n">2</span>)).<span class="f">key</span>(<span class="s">&quot;large&quot;</span>))
+}</code></pre></figure>
+
+<h2>Slider</h2>
+<p><code>slider(theme, value, on_change)</code> takes a value from 0 to 1 and calls <code>on_change</code> with the new one while the user drags. It also responds to the arrow keys, Home and End when focused, and screen readers can increment, decrement or set it.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/sliders-light.png" alt="A slider at about one third" width="360" height="120"><img class="dark" src="img/sliders-dark.png" alt="A slider at about one third" width="360" height="120"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">sliders</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">slider</span>(theme, <span class="n">0.35</span>, <span class="t">Msg</span>::<span class="t">Volume</span>).<span class="f">w</span>(<span class="n">240.0</span>).<span class="f">label</span>(<span class="s">&quot;Volume&quot;</span>)
+}</code></pre></figure>
+
+<h2>Segmented control</h2>
+<p><code>segmented(theme, options, selected, on_select)</code> shows one of a few options at a time. It sizes itself to its labels.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/segmented_control-light.png" alt="A segmented control with Day, Week and Month, Week selected" width="360" height="120"><img class="dark" src="img/segmented_control-dark.png" alt="A segmented control with Day, Week and Month, Week selected" width="360" height="120"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">segmented_control</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">segmented</span>(theme, &amp;[<span class="s">&quot;Day&quot;</span>, <span class="s">&quot;Week&quot;</span>, <span class="s">&quot;Month&quot;</span>], <span class="n">1</span>, <span class="t">Msg</span>::<span class="t">View</span>)
+}</code></pre></figure>
+
+  </main>
+</div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    function current() {
+      return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    }
+    document.getElementById("mode").addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("embun-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>

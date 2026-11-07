@@ -1,0 +1,35 @@
+<p>Embun is a Rust UI toolkit with glass controls that match macOS 27. You describe the UI as a tree of elements, Embun lays it out and draws it with wgpu, and your app gets a message when the user presses something.</p>
+
+<h2>Install</h2>
+{{sh}}
+cargo add embun
+{{/sh}}
+<p>Embun draws with wgpu, so it needs Metal (macOS), Vulkan, DirectX 12 or OpenGL. The tests run on macOS with Metal and on Linux with Vulkan and OpenGL. Windows is untested.</p>
+
+<h2>Your first app</h2>
+<p>An app is a struct, a message type and two functions. <code>update</code> changes the struct when a message arrives. <code>view</code> returns the elements for the current state. This one is a counter with two buttons.</p>
+{{example counter}}
+<p>Run it with a window:</p>
+{{rust}}
+fn main() -> Result<(), RunError> {
+    run(Counter { count: 0 }, Settings::new("Counter").size(420.0, 300.0))
+}
+{{/rust}}
+
+<h2>How a press becomes a change</h2>
+<ol>
+  <li>The user presses <b>Increase</b>. Embun finds the element under the pointer and takes the message you gave to <code>on_press</code>.</li>
+  <li>Embun calls <code>update(Message::Increment)</code>. You change <code>self.count</code>.</li>
+  <li>Embun calls <code>view</code> again, lays out the new tree and draws it.</li>
+</ol>
+<p>Your app owns all the state. Controls such as <code>switch</code>, <code>slider</code> and <code>text_input</code> take their value from you and send a message when it should change.</p>
+
+<h2>Styling</h2>
+<p>Elements are styled with methods named after Tailwind classes: <code>gap_3</code>, <code>p_5</code>, <code>rounded_full</code>, <code>items_center</code>. Colors come from the <code>Theme</code> that <code>view</code> receives, so your UI follows light and dark mode.</p>
+
+<h2>Where to go next</h2>
+<ul>
+  <li><a href="buttons.html">Buttons and toolbars</a>: the glass controls.</li>
+  <li><a href="controls.html">Controls</a>: switches, checkboxes, radio buttons, sliders and segmented controls.</li>
+  <li>The <a href="https://github.com/fikrifirmanf/embun/tree/main/crates/embun/examples">examples folder</a> has a photo library, a notes app and a list of a million rows.</li>
+</ul>

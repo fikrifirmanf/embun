@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started · Embun</title>
+<meta name="description" content="Embun is a Rust UI toolkit with glass controls that match macOS 27, drawn with wgpu.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3c5 7 9 11 9 16a9 9 0 0 1-18 0c0-5 4-9 9-16z' fill='%230a60d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script>
+  try {
+    var saved = localStorage.getItem("embun-theme");
+    if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="./">Embun</a>
+  <nav class="links" aria-label="Project">
+    <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
+    <a href="https://docs.rs/embun">API reference</a>
+    <a href="https://crates.io/crates/embun">crates.io</a>
+  </nav>
+  <button class="mode" type="button" id="mode" aria-label="Switch between light and dark previews">
+    <span class="mode-light">Light</span><span class="mode-dark">Dark</span>
+  </button>
+</header>
+<div class="shell">
+  <nav class="side" aria-label="Pages"><ul><li><a href="./" aria-current="page">Getting started</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li></ul></nav>
+  <main id="main">
+    <h1>Getting started</h1>
+    <p>Embun is a Rust UI toolkit with glass controls that match macOS 27. You describe the UI as a tree of elements, Embun lays it out and draws it with wgpu, and your app gets a message when the user presses something.</p>
+
+<h2>Install</h2>
+<pre class="code" tabindex="0"><code>cargo add embun</code></pre>
+<p>Embun draws with wgpu, so it needs Metal (macOS), Vulkan, DirectX 12 or OpenGL. The tests run on macOS with Metal and on Linux with Vulkan and OpenGL. Windows is untested.</p>
+
+<h2>Your first app</h2>
+<p>An app is a struct, a message type and two functions. <code>update</code> changes the struct when a message arrives. <code>view</code> returns the elements for the current state. This one is a counter with two buttons.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/counter-light.png" alt="A large number 0 above two buttons, Decrease and Increase" width="420" height="300"><img class="dark" src="img/counter-dark.png" alt="A large number 0 above two buttons, Decrease and Increase" width="420" height="300"></div><pre class="code" tabindex="0"><code><span class="k">use</span> embun::*;
+
+<span class="k">pub</span> <span class="k">struct</span> <span class="t">Counter</span> {
+    <span class="k">pub</span> count: i32,
+}
+
+#[<span class="f">derive</span>(<span class="t">Clone</span>)]
+<span class="k">pub</span> <span class="k">enum</span> <span class="t">Message</span> {
+    <span class="t">Increment</span>,
+    <span class="t">Decrement</span>,
+}
+
+<span class="k">impl</span> <span class="t">App</span> <span class="k">for</span> <span class="t">Counter</span> {
+    <span class="k">type</span> <span class="t">Message</span> = <span class="t">Message</span>;
+
+    <span class="k">fn</span> <span class="f">update</span>(&amp;<span class="k">mut</span> <span class="k">self</span>, message: <span class="t">Message</span>) {
+        <span class="k">match</span> message {
+            <span class="t">Message</span>::<span class="t">Increment</span> =&gt; <span class="k">self</span>.count += <span class="n">1</span>,
+            <span class="t">Message</span>::<span class="t">Decrement</span> =&gt; <span class="k">self</span>.count -= <span class="n">1</span>,
+        }
+    }
+
+    <span class="k">fn</span> <span class="f">view</span>(&amp;<span class="k">self</span>, theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Message</span>&gt; {
+        <span class="f">column</span>()
+            .<span class="f">items_center</span>()
+            .<span class="f">justify_center</span>()
+            .<span class="f">gap_6</span>()
+            .<span class="f">bg_gradient</span>(theme.<span class="f">pick</span>(<span class="t">Color</span>::<span class="f">hex</span>(<span class="n">0xffd6a5</span>), <span class="t">Color</span>::<span class="f">hex</span>(<span class="n">0x2b2d42</span>)), theme.<span class="f">pick</span>(<span class="t">Color</span>::<span class="f">hex</span>(<span class="n">0xbde0fe</span>), <span class="t">Color</span>::<span class="f">hex</span>(<span class="n">0x14213d</span>)))
+            .<span class="f">child</span>(<span class="f">text</span>(<span class="k">self</span>.count.<span class="f">to_string</span>()).<span class="f">text_size</span>(<span class="n">64.0</span>).<span class="f">font_bold</span>())
+            .<span class="f">child</span>(
+                <span class="f">row</span>()
+                    .<span class="f">gap_3</span>()
+                    .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Decrease&quot;</span>).<span class="f">size</span>(<span class="t">ControlSize</span>::<span class="t">Large</span>).<span class="f">on_press</span>(<span class="t">Message</span>::<span class="t">Decrement</span>))
+                    .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Increase&quot;</span>).<span class="f">size</span>(<span class="t">ControlSize</span>::<span class="t">Large</span>).<span class="f">prominent</span>().<span class="f">on_press</span>(<span class="t">Message</span>::<span class="t">Increment</span>)),
+            )
+    }
+}</code></pre></figure>
+<p>Run it with a window:</p>
+<pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">main</span>() -&gt; <span class="t">Result</span>&lt;(), <span class="t">RunError</span>&gt; {
+    <span class="f">run</span>(<span class="t">Counter</span> { count: <span class="n">0</span> }, <span class="t">Settings</span>::<span class="f">new</span>(<span class="s">&quot;Counter&quot;</span>).<span class="f">size</span>(<span class="n">420.0</span>, <span class="n">300.0</span>))
+}</code></pre>
+
+<h2>How a press becomes a change</h2>
+<ol>
+  <li>The user presses <b>Increase</b>. Embun finds the element under the pointer and takes the message you gave to <code>on_press</code>.</li>
+  <li>Embun calls <code>update(Message::Increment)</code>. You change <code>self.count</code>.</li>
+  <li>Embun calls <code>view</code> again, lays out the new tree and draws it.</li>
+</ol>
+<p>Your app owns all the state. Controls such as <code>switch</code>, <code>slider</code> and <code>text_input</code> take their value from you and send a message when it should change.</p>
+
+<h2>Styling</h2>
+<p>Elements are styled with methods named after Tailwind classes: <code>gap_3</code>, <code>p_5</code>, <code>rounded_full</code>, <code>items_center</code>. Colors come from the <code>Theme</code> that <code>view</code> receives, so your UI follows light and dark mode.</p>
+
+<h2>Where to go next</h2>
+<ul>
+  <li><a href="buttons.html">Buttons and toolbars</a>: the glass controls.</li>
+  <li><a href="controls.html">Controls</a>: switches, checkboxes, radio buttons, sliders and segmented controls.</li>
+  <li>The <a href="https://github.com/fikrifirmanf/embun/tree/main/crates/embun/examples">examples folder</a> has a photo library, a notes app and a list of a million rows.</li>
+</ul>
+
+  </main>
+</div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    function current() {
+      return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    }
+    document.getElementById("mode").addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("embun-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>

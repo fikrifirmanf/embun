@@ -1,0 +1,22 @@
+<p>These controls hold no state of their own. You pass the current value and a message, and your <code>update</code> changes the value. All of them tell screen readers their role and state.</p>
+<p>The previews sit on a plain background. Put these controls on a solid or content background, and keep glass for buttons, slider thumbs and bars.</p>
+
+<h2>Switch</h2>
+<p><code>switch(theme, on, message)</code>. The knob slides when the value changes. Give it a <code>label</code> so a screen reader can say what it turns on.</p>
+{{example switches}}
+
+<h2>Checkbox</h2>
+<p><code>checkbox(theme, label, checked, message)</code> draws the label beside the box, and pressing the label toggles it too.</p>
+{{example checkboxes}}
+
+<h2>Radio</h2>
+<p><code>radio(theme, label, selected, message)</code>. Build a group by calling it once per option, with <code>selected</code> true for the current one, and give each a <code>key</code>.</p>
+{{example radios}}
+
+<h2>Slider</h2>
+<p><code>slider(theme, value, on_change)</code> takes a value from 0 to 1 and calls <code>on_change</code> with the new one while the user drags. It also responds to the arrow keys, Home and End when focused, and screen readers can increment, decrement or set it.</p>
+{{example sliders}}
+
+<h2>Segmented control</h2>
+<p><code>segmented(theme, options, selected, on_select)</code> shows one of a few options at a time. It sizes itself to its labels.</p>
+{{example segmented_control}}

@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod controls;
+pub mod counter;
 pub mod library;
 pub mod notes;
 pub mod photos;

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buttons and toolbars · Embun</title>
+<meta name="description" content="Embun is a Rust UI toolkit with glass controls that match macOS 27, drawn with wgpu.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3c5 7 9 11 9 16a9 9 0 0 1-18 0c0-5 4-9 9-16z' fill='%230a60d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script>
+  try {
+    var saved = localStorage.getItem("embun-theme");
+    if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="./">Embun</a>
+  <nav class="links" aria-label="Project">
+    <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
+    <a href="https://docs.rs/embun">API reference</a>
+    <a href="https://crates.io/crates/embun">crates.io</a>
+  </nav>
+  <button class="mode" type="button" id="mode" aria-label="Switch between light and dark previews">
+    <span class="mode-light">Light</span><span class="mode-dark">Dark</span>
+  </button>
+</header>
+<div class="shell">
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="buttons.html" aria-current="page">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li></ul></nav>
+  <main id="main">
+    <h1>Buttons and toolbars</h1>
+    <p>Buttons are glass. They frost whatever is behind them, so they look right over a photo, a gradient or your own content, and they are less useful over a flat color. Every example on this site is drawn by Embun's own renderer.</p>
+
+<h2>Button</h2>
+<p><code>button</code> takes a label. <code>on_press</code> sets the message to send. <code>prominent</code> tints it with the accent color for the main action in a view.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/button_basic-light.png" alt="A Cancel button and a blue Save button over a landscape" width="360" height="140"><img class="dark" src="img/button_basic-dark.png" alt="A Cancel button and a blue Save button over a landscape" width="360" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">button_basic</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">row</span>()
+        .<span class="f">gap_3</span>()
+        .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Cancel&quot;</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Cancel</span>))
+        .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Save&quot;</span>).<span class="f">prominent</span>().<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Save</span>))
+}</code></pre></figure>
+
+<h2>Sizes</h2>
+<p><code>ControlSize</code> has four sizes: <code>Small</code>, <code>Regular</code> (the default), <code>Large</code> and <code>ExtraLarge</code>. Their heights follow the buttons in macOS 27.0.1.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/button_sizes-light.png" alt="Four buttons from Small to Extra large" width="640" height="140"><img class="dark" src="img/button_sizes-dark.png" alt="Four buttons from Small to Extra large" width="640" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">button_sizes</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">row</span>()
+        .<span class="f">gap_3</span>()
+        .<span class="f">items_center</span>()
+        .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Small&quot;</span>).<span class="f">size</span>(<span class="t">ControlSize</span>::<span class="t">Small</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Save</span>))
+        .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Regular&quot;</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Save</span>))
+        .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Large&quot;</span>).<span class="f">size</span>(<span class="t">ControlSize</span>::<span class="t">Large</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Save</span>))
+        .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Extra large&quot;</span>).<span class="f">size</span>(<span class="t">ControlSize</span>::<span class="t">ExtraLarge</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Save</span>))
+}</code></pre></figure>
+
+<h2>Icon buttons</h2>
+<p>An icon button is round and shows a glyph. Give it a <code>label</code>, because a screen reader has nothing else to read out.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/icon_buttons-light.png" alt="Three round buttons: plus, minus and a blue close button" width="360" height="140"><img class="dark" src="img/icon_buttons-dark.png" alt="Three round buttons: plus, minus and a blue close button" width="360" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">icon_buttons</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">row</span>()
+        .<span class="f">gap_3</span>()
+        .<span class="f">child</span>(<span class="f">icon_button</span>(<span class="s">&quot;+&quot;</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Save</span>).<span class="f">label</span>(<span class="s">&quot;Add&quot;</span>))
+        .<span class="f">child</span>(<span class="f">icon_button</span>(<span class="s">&quot;−&quot;</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Cancel</span>).<span class="f">label</span>(<span class="s">&quot;Remove&quot;</span>))
+        .<span class="f">child</span>(<span class="f">icon_button</span>(<span class="s">&quot;×&quot;</span>).<span class="f">prominent</span>().<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Cancel</span>).<span class="f">label</span>(<span class="s">&quot;Close&quot;</span>))
+}</code></pre></figure>
+
+<h2>Toolbar</h2>
+<p><code>toolbar_group</code> joins its items into one glass pill, the way macOS groups back and forward. Put other buttons beside it.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/toolbar-light.png" alt="A pair of back and forward buttons beside a blue Share button" width="420" height="140"><img class="dark" src="img/toolbar-dark.png" alt="A pair of back and forward buttons beside a blue Share button" width="420" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">toolbar</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">row</span>()
+        .<span class="f">gap_3</span>()
+        .<span class="f">items_center</span>()
+        .<span class="f">child</span>(
+            <span class="f">toolbar_group</span>()
+                .<span class="f">child</span>(<span class="f">toolbar_item</span>(<span class="s">&quot;‹&quot;</span>, <span class="t">Msg</span>::<span class="t">Back</span>).<span class="f">label</span>(<span class="s">&quot;Back&quot;</span>))
+                .<span class="f">child</span>(<span class="f">toolbar_item</span>(<span class="s">&quot;›&quot;</span>, <span class="t">Msg</span>::<span class="t">Forward</span>).<span class="f">label</span>(<span class="s">&quot;Forward&quot;</span>)),
+        )
+        .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Share&quot;</span>).<span class="f">size</span>(<span class="t">ControlSize</span>::<span class="t">Large</span>).<span class="f">prominent</span>().<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Share</span>))
+}</code></pre></figure>
+
+<h2>Sidebar</h2>
+<p><code>sidebar</code> is a glass panel with a heading and rows. Pass <code>true</code> to <code>sidebar_item</code> for the selected row. Give each row a <code>key</code> so Embun keeps its hover and press state when the list changes.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/sidebar_list-light.png" alt="A glass sidebar with a Library heading and three albums, All Photos selected" width="420" height="260"><img class="dark" src="img/sidebar_list-dark.png" alt="A glass sidebar with a Library heading and three albums, All Photos selected" width="420" height="260"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">sidebar_list</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">sidebar</span>()
+        .<span class="f">w</span>(<span class="n">200.0</span>)
+        .<span class="f">child</span>(<span class="f">sidebar_heading</span>(<span class="s">&quot;Library&quot;</span>).<span class="f">text_color</span>(theme.<span class="f">secondary_label</span>()))
+        .<span class="f">child</span>(<span class="f">sidebar_item</span>(<span class="s">&quot;All Photos&quot;</span>, true, <span class="t">Msg</span>::<span class="t">Pick</span>(<span class="n">0</span>)).<span class="f">key</span>(<span class="s">&quot;all&quot;</span>))
+        .<span class="f">child</span>(<span class="f">sidebar_item</span>(<span class="s">&quot;Favorites&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Pick</span>(<span class="n">1</span>)).<span class="f">key</span>(<span class="s">&quot;favorites&quot;</span>))
+        .<span class="f">child</span>(<span class="f">sidebar_item</span>(<span class="s">&quot;Travel&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Pick</span>(<span class="n">2</span>)).<span class="f">key</span>(<span class="s">&quot;travel&quot;</span>))
+}</code></pre></figure>
+
+<div class="note"><p>Glass over glass shows nothing, because there is nothing behind it to frost. Put glass buttons on content, not inside another glass panel.</p></div>
+
+  </main>
+</div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    function current() {
+      return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    }
+    document.getElementById("mode").addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("embun-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>

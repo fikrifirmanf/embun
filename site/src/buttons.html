@@ -1,0 +1,23 @@
+<p>Buttons are glass. They frost whatever is behind them, so they look right over a photo, a gradient or your own content, and they are less useful over a flat color. Every example on this site is drawn by Embun's own renderer.</p>
+
+<h2>Button</h2>
+<p><code>button</code> takes a label. <code>on_press</code> sets the message to send. <code>prominent</code> tints it with the accent color for the main action in a view.</p>
+{{example button_basic}}
+
+<h2>Sizes</h2>
+<p><code>ControlSize</code> has four sizes: <code>Small</code>, <code>Regular</code> (the default), <code>Large</code> and <code>ExtraLarge</code>. Their heights follow the buttons in macOS 27.0.1.</p>
+{{example button_sizes}}
+
+<h2>Icon buttons</h2>
+<p>An icon button is round and shows a glyph. Give it a <code>label</code>, because a screen reader has nothing else to read out.</p>
+{{example icon_buttons}}
+
+<h2>Toolbar</h2>
+<p><code>toolbar_group</code> joins its items into one glass pill, the way macOS groups back and forward. Put other buttons beside it.</p>
+{{example toolbar}}
+
+<h2>Sidebar</h2>
+<p><code>sidebar</code> is a glass panel with a heading and rows. Pass <code>true</code> to <code>sidebar_item</code> for the selected row. Give each row a <code>key</code> so Embun keeps its hover and press state when the list changes.</p>
+{{example sidebar_list}}
+
+<div class="note"><p>Glass over glass shows nothing, because there is nothing behind it to frost. Put glass buttons on content, not inside another glass panel.</p></div>

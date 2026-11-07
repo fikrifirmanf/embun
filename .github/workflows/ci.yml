@@ -45,3 +45,16 @@ jobs:
         run: cargo doc --workspace --exclude embun-web --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+  # The pages are generated from the example code. This fails when the code
+  # changed and the committed pages did not. Images are made on a Mac with Metal
+  # and are not rebuilt here.
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the pages
+        run: cargo run -p embun --example docs -- site --html-only
+      - name: Check they match what is committed
+        run: git diff --exit-code site
