@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use embun_motion::{Animated, Spring};
 
-use crate::element::{Element, Role};
+use crate::element::{Element, Kind, Role};
 use crate::layout::{self, Rect4, ScrollInfo};
 use crate::render::Renderer;
 use crate::scene::{self, Highlight, Scene};
@@ -22,8 +22,10 @@ pub trait App {
     fn view(&self, theme: &Theme) -> Element<Self::Message>;
 }
 
-/// A key press Embun handles itself.
+/// A key press Embun handles itself. Typed characters go to
+/// [`Ui::insert_text`] instead.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Key {
     /// Moves keyboard focus to the next control.
     Tab,
@@ -33,7 +35,33 @@ pub enum Key {
     Activate,
     /// Clears keyboard focus.
     Escape,
+    Backspace,
+    Delete,
+    Left,
+    Right,
+    /// Start of the field.
+    Home,
+    /// End of the field.
+    End,
+    /// Left, Right, Home and End with Shift: extend the selection.
+    SelectLeft,
+    SelectRight,
+    SelectHome,
+    SelectEnd,
+    SelectAll,
 }
+
+/// The text field being edited: cursor and the other end of the selection,
+/// as byte offsets into its value.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Edit {
+    id: u64,
+    cursor: usize,
+    anchor: usize,
+}
+
+/// A text field's change handler.
+type OnChange<M> = dyn Fn(String) -> M;
 
 /// What the pointer and focus can reach in the last layout.
 #[derive(Clone, Debug)]
@@ -45,6 +73,7 @@ struct Target {
     on_top: bool,
     press: Option<u64>,
     scroll: Option<u64>,
+    input: bool,
 }
 
 const PRESS: Spring = Spring { response: 0.2, damping_fraction: 0.8 };
@@ -68,6 +97,7 @@ pub struct Ui<A: App> {
     hovered: Option<u64>,
     pressed: Option<u64>,
     focused: Option<u64>,
+    edit: Option<Edit>,
     highlight: HashMap<u64, (Animated, Animated)>,
     scene: Scene,
     dirty: bool,
@@ -94,6 +124,7 @@ impl<A: App> Ui<A> {
             hovered: None,
             pressed: None,
             focused: None,
+            edit: None,
             highlight: HashMap::new(),
             scene: Scene::default(),
             dirty: true,
@@ -161,6 +192,9 @@ impl<A: App> Ui<A> {
         let mut scroll_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
         for (i, n) in nodes.iter().enumerate() {
             let inherited = |v: &[Option<u64>]| n.parent.and_then(|p| v[p]);
+            if n.el.role == Role::TextField {
+                self.focus_order.push(n.id);
+            }
             let press = if let Some(m) = &n.el.on_press {
                 self.messages.insert(n.id, m.clone());
                 if n.el.role == Role::Button {
@@ -180,6 +214,7 @@ impl<A: App> Ui<A> {
                 on_top: n.on_glass.is_some() || n.el.style.glass.is_some(),
                 press,
                 scroll,
+                input: n.el.on_input.is_some(),
             });
             let _ = i;
         }
@@ -191,12 +226,163 @@ impl<A: App> Ui<A> {
                 *id = None;
             }
         }
+        if self.edit.is_some_and(|e| Some(e.id) != self.focused) {
+            self.edit = None;
+        }
         self.scroll.retain(|id, _| alive.contains(id));
 
         let highlight: HashMap<u64, Highlight> =
             self.highlight.iter().map(|(&id, (press, hover))| (id, Highlight { press: press.value, hover: hover.value })).collect();
-        self.scene = scene::build(&nodes, &self.theme, &highlight, self.focused);
+        let caret = self.edit.and_then(|edit| {
+            let node = nodes.iter().find(|n| n.id == edit.id)?;
+            let Kind::Input { value, .. } = &node.el.kind else { return None };
+            let cursor = edit.cursor.min(value.len());
+            let anchor = edit.anchor.min(value.len());
+            let mut x = |i: usize| self.text.measure(&value[..i], &node.text, None)[0];
+            let (caret, other) = (x(cursor), x(anchor));
+            let inner = node.rect[2] - node.el.style.padding[1] - node.el.style.padding[3];
+            Some(scene::Caret {
+                id: edit.id,
+                x: caret,
+                selection: (cursor != anchor).then(|| (caret.min(other), caret.max(other))),
+                // Shift the text left so the caret stays inside the field.
+                scroll: (caret - inner + 2.0).max(0.0),
+            })
+        });
+        self.scene = scene::build(&nodes, &self.theme, &highlight, self.focused, caret.as_ref());
         true
+    }
+
+    /// True while a text field has keyboard focus: typed text goes to it.
+    pub fn is_editing(&self) -> bool {
+        self.edit.is_some()
+    }
+
+    /// Runs `view` again if a message invalidated the last one.
+    fn ensure_view(&mut self) {
+        if self.view.is_none() {
+            self.view = Some(self.app.view(&self.theme));
+        }
+    }
+
+    /// The value and change handler of the text field `id`.
+    fn input(&self, id: u64) -> Option<(String, &OnChange<A::Message>)> {
+        let view = self.view.as_ref()?;
+        let nodes = layout::flatten(view, &self.theme);
+        let node = nodes.iter().find(|n| n.id == id)?;
+        match (&node.el.kind, node.el.on_input.as_deref()) {
+            (Kind::Input { value, .. }, Some(on_change)) => Some((value.clone(), on_change)),
+            _ => None,
+        }
+    }
+
+    /// The selected text in the focused field, for Copy.
+    pub fn selected_text(&mut self) -> Option<String> {
+        self.ensure_view();
+        let edit = self.edit?;
+        let (value, _) = self.input(edit.id)?;
+        let (start, end) = (edit.cursor.min(edit.anchor).min(value.len()), edit.cursor.max(edit.anchor).min(value.len()));
+        (start != end).then(|| value[start..end].to_owned())
+    }
+
+    /// Removes the selection in the focused field and returns it, for Cut.
+    pub fn cut(&mut self) -> Option<String> {
+        let text = self.selected_text()?;
+        self.edit_value(|value, start, end| {
+            value.replace_range(start..end, "");
+            start
+        });
+        Some(text)
+    }
+
+    /// Replaces the selection in the focused text field with `text`, as
+    /// typing, pasting or an input method does.
+    pub fn insert_text(&mut self, text: &str) {
+        // One line: pasted line breaks become spaces, other control characters go.
+        let text: String = text.chars().map(|c| if c == '\n' { ' ' } else { c }).filter(|c| !c.is_control()).collect();
+        if text.is_empty() {
+            return;
+        }
+        self.edit_value(|value, start, end| {
+            value.replace_range(start..end, &text);
+            start + text.len()
+        });
+    }
+
+    /// Applies `change` to the focused field's value and selection range;
+    /// `change` returns the new cursor. Sends the field's message if the
+    /// value changed.
+    fn edit_value(&mut self, change: impl FnOnce(&mut String, usize, usize) -> usize) {
+        self.ensure_view();
+        let Some(edit) = self.edit else { return };
+        let Some((mut value, on_change)) = self.input(edit.id) else { return };
+        let (start, end) = (edit.cursor.min(edit.anchor).min(value.len()), edit.cursor.max(edit.anchor).min(value.len()));
+        let before = value.clone();
+        let cursor = change(&mut value, start, end);
+        let message = (value != before).then(|| on_change(value));
+        self.edit = Some(Edit { cursor, anchor: cursor, ..edit });
+        self.dirty = true;
+        if let Some(message) = message {
+            self.send(message);
+        }
+    }
+
+    fn move_cursor(&mut self, key: Key) {
+        self.ensure_view();
+        let Some(edit) = self.edit else { return };
+        let Some((value, _)) = self.input(edit.id) else { return };
+        let cursor = edit.cursor.min(value.len());
+        let prev = value[..cursor].char_indices().next_back().map_or(0, |(i, _)| i);
+        let next = value[cursor..].chars().next().map_or(cursor, |c| cursor + c.len_utf8());
+        let (start, end) = (edit.cursor.min(edit.anchor), edit.cursor.max(edit.anchor));
+        let (cursor, anchor) = match key {
+            Key::Left if start != end => (start, start),
+            Key::Right if start != end => (end, end),
+            Key::Left => (prev, prev),
+            Key::Right => (next, next),
+            Key::Home => (0, 0),
+            Key::End => (value.len(), value.len()),
+            Key::SelectLeft => (prev, edit.anchor),
+            Key::SelectRight => (next, edit.anchor),
+            Key::SelectHome => (0, edit.anchor),
+            Key::SelectEnd => (value.len(), edit.anchor),
+            Key::SelectAll => (value.len(), 0),
+            _ => return,
+        };
+        self.edit = Some(Edit { cursor, anchor, ..edit });
+        self.dirty = true;
+    }
+
+    /// The byte offset in the field `id` closest to the window x position.
+    fn offset_at(&mut self, id: u64, x: f32) -> usize {
+        self.ensure_view();
+        let Some((value, _)) = self.input(id) else { return 0 };
+        let Some(target) = self.targets.iter().find(|t| t.id == id) else { return value.len() };
+        let view = self.view.as_ref().expect("view");
+        let nodes = layout::flatten(view, &self.theme);
+        let Some(node) = nodes.iter().find(|n| n.id == id) else { return value.len() };
+        let local = x - target.rect[0] - node.el.style.padding[3] + self.scene.caret_scroll(id);
+        let style = node.text.clone();
+        let mut best = (0, f32::MAX);
+        for (i, _) in value.char_indices().chain([(value.len(), ' ')]) {
+            let d = (self.text.measure(&value[..i], &style, None)[0] - local).abs();
+            if d < best.1 {
+                best = (i, d);
+            }
+        }
+        best.0
+    }
+
+    fn focus(&mut self, id: Option<u64>) {
+        self.ensure_view();
+        self.focused = id;
+        self.edit = None;
+        if let Some(id) = id
+            && let Some((value, _)) = self.input(id)
+        {
+            self.edit = Some(Edit { id, cursor: value.len(), anchor: 0 });
+        }
+        self.dirty = true;
     }
 
     /// Advances animations by `dt` seconds. Returns true while any is moving.
@@ -263,12 +449,24 @@ impl<A: App> Ui<A> {
 
     pub fn pointer_pressed(&mut self) {
         let Some(p) = self.pointer else { return };
-        self.pressed = self.hit(p).and_then(|t| t.press);
+        let hit = self.hit(p).cloned();
+        if let Some(t) = hit.as_ref().filter(|t| t.input) {
+            // Clicking a text field focuses it and puts the cursor there.
+            let id = t.id;
+            if self.focused != Some(id) {
+                self.focus(Some(id));
+            }
+            let offset = self.offset_at(id, p[0]);
+            self.edit = Some(Edit { id, cursor: offset, anchor: offset });
+            self.dirty = true;
+            return;
+        }
+        self.pressed = hit.and_then(|t| t.press);
         if let Some(id) = self.pressed {
             self.animate(id, Some(1.0), None);
         }
-        if self.focused.take().is_some() {
-            self.dirty = true;
+        if self.focused.is_some() {
+            self.focus(None);
         }
     }
 
@@ -310,9 +508,9 @@ impl<A: App> Ui<A> {
                     (Some(i), Key::Tab) => (i + 1) % n,
                     (Some(i), _) => (i + n - 1) % n,
                 };
-                self.focused = Some(self.focus_order[next]);
-                self.dirty = true;
+                self.focus(Some(self.focus_order[next]));
             }
+            Key::Activate if self.edit.is_some() => {}
             Key::Activate => {
                 if let Some(message) = self.focused.and_then(|id| self.messages.get(&id).cloned()) {
                     let id = self.focused.expect("focused");
@@ -328,10 +526,30 @@ impl<A: App> Ui<A> {
                 }
             }
             Key::Escape => {
-                if self.focused.take().is_some() {
-                    self.dirty = true;
+                if self.focused.is_some() {
+                    self.focus(None);
                 }
             }
+            Key::Backspace => self.edit_value(|value, start, end| {
+                if start != end {
+                    value.replace_range(start..end, "");
+                    start
+                } else if let Some((prev, _)) = value[..start].char_indices().next_back() {
+                    value.replace_range(prev..start, "");
+                    prev
+                } else {
+                    start
+                }
+            }),
+            Key::Delete => self.edit_value(|value, start, end| {
+                if start != end {
+                    value.replace_range(start..end, "");
+                } else if let Some(c) = value[start..].chars().next() {
+                    value.replace_range(start..start + c.len_utf8(), "");
+                }
+                start
+            }),
+            other => self.move_cursor(other),
         }
     }
 
@@ -476,6 +694,119 @@ mod tests {
             assert!(frames < 600, "animation never settled");
         }
         assert_eq!(ui.scene().glass[0].half_size, rest);
+    }
+
+    struct Form {
+        name: String,
+        saved: u32,
+    }
+
+    #[derive(Clone)]
+    enum FormMsg {
+        Name(String),
+        Save,
+    }
+
+    impl App for Form {
+        type Message = FormMsg;
+        fn update(&mut self, m: FormMsg) {
+            match m {
+                FormMsg::Name(n) => self.name = n,
+                FormMsg::Save => self.saved += 1,
+            }
+        }
+        fn view(&self, _: &Theme) -> Element<FormMsg> {
+            column()
+                .p_4()
+                .gap_2()
+                .child(crate::text_input(self.name.clone(), FormMsg::Name).key("name").placeholder("Name"))
+                .child(div().key("save").h(30.0).on_press(FormMsg::Save))
+        }
+    }
+
+    fn form(name: &str) -> Ui<Form> {
+        Ui::new(Form { name: name.into(), saved: 0 }, Theme::default(), [300.0, 200.0])
+    }
+
+    #[test]
+    fn typing_into_a_focused_field_updates_the_app() {
+        let mut ui = form("");
+        ui.update();
+        ui.key(Key::Tab);
+        assert!(ui.is_editing());
+        ui.insert_text("Ada");
+        ui.insert_text(" L");
+        assert_eq!(ui.app().name, "Ada L");
+        ui.key(Key::Backspace);
+        ui.key(Key::Left);
+        ui.key(Key::Left);
+        ui.insert_text("!");
+        assert_eq!(ui.app().name, "Ad!a ");
+        ui.key(Key::End);
+        ui.key(Key::Delete);
+        assert_eq!(ui.app().name, "Ad!a ", "Delete at the end does nothing");
+    }
+
+    #[test]
+    fn selections_are_replaced_by_typing_and_removed_by_backspace() {
+        let mut ui = form("hello world");
+        ui.update();
+        ui.key(Key::Tab);
+        // Focusing selects everything, so typing replaces it.
+        ui.insert_text("bye");
+        assert_eq!(ui.app().name, "bye");
+        ui.key(Key::SelectHome);
+        ui.key(Key::Backspace);
+        assert_eq!(ui.app().name, "");
+        ui.insert_text("añb");
+        ui.key(Key::Left);
+        ui.key(Key::SelectLeft);
+        ui.key(Key::Backspace);
+        assert_eq!(ui.app().name, "ab", "multi-byte characters move and delete whole");
+    }
+
+    #[test]
+    fn clicking_in_a_field_places_the_cursor_and_space_types_instead_of_pressing() {
+        let mut ui = form("abc");
+        let field = ui.rect_of_key("name").expect("field");
+        // Just inside the left padding: before the first character.
+        ui.pointer_moved([field[0] + 9.0, field[1] + field[3] / 2.0]);
+        ui.pointer_pressed();
+        ui.pointer_released();
+        ui.insert_text("x");
+        assert_eq!(ui.app().name, "xabc");
+        ui.key(Key::Activate);
+        assert_eq!(ui.app().saved, 0, "Activate while editing must not press other controls");
+        ui.key(Key::SelectAll);
+        assert_eq!(ui.cut().as_deref(), Some("xabc"));
+        assert_eq!(ui.app().name, "");
+        ui.insert_text("one\ntwo");
+        assert_eq!(ui.app().name, "one two", "pasted line breaks become spaces");
+        ui.key(Key::SelectLeft);
+        ui.key(Key::SelectLeft);
+        assert_eq!(ui.selected_text().as_deref(), Some("wo"));
+        // Clicking elsewhere ends editing.
+        ui.pointer_moved([field[0] + field[2] + 40.0, field[1] + 1.0]);
+        ui.pointer_pressed();
+        ui.pointer_released();
+        assert!(!ui.is_editing());
+    }
+
+    #[test]
+    fn the_caret_and_placeholder_are_drawn() {
+        let mut ui = form("");
+        let texts = |scene: &Scene| -> Vec<String> {
+            scene.content.iter().filter_map(|p| if let crate::scene::Prim::Text { text, .. } = p { Some(text.clone()) } else { None }).collect()
+        };
+        assert_eq!(texts(ui.scene()), ["Name"]);
+        assert!(ui.scene().caret.is_none());
+        ui.key(Key::Tab);
+        let caret = ui.scene().caret.expect("caret while editing");
+        assert_eq!((caret.x, caret.selection), (0.0, None));
+        ui.insert_text("Hi");
+        let caret = ui.scene().caret.expect("caret");
+        assert!(caret.x > 8.0, "caret should move past the text, at {}", caret.x);
+        assert_eq!(texts(ui.scene()), ["Hi"]);
     }
 
     #[test]

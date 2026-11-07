@@ -18,6 +18,7 @@ pollster.workspace = true
 winit.workspace = true
 taffy.workspace = true
 glyphon.workspace = true
+arboard.workspace = true
 
 [dev-dependencies]
 png.workspace = true

@@ -190,7 +190,7 @@ fn build_into<M>(tree: &mut TaffyTree<usize>, nodes: &[Node<'_, M>], i: usize, i
         style.min_size = Size { width: length(0.0), height: length(0.0) };
     }
     let id = match nodes[i].el.kind {
-        Kind::Text(_) | Kind::Image(_) => tree.new_leaf_with_context(style, i).expect("taffy leaf"),
+        Kind::Text(_) | Kind::Image(_) | Kind::Input { .. } => tree.new_leaf_with_context(style, i).expect("taffy leaf"),
         Kind::Div => {
             for &c in &nodes[i].children {
                 build_into(tree, nodes, c, ids, false);
@@ -281,6 +281,11 @@ fn measure<M>(
                 (None, Some(h)) => Size { width: h / aspect, height: h },
                 _ => Size { width: image.width as f32, height: image.height as f32 },
             }
+        }
+        Kind::Input { .. } => {
+            // Its own size comes from the style; this is only the fallback.
+            let line = node.text.size * node.text.line_height;
+            Size { width: known.width.unwrap_or(200.0), height: known.height.unwrap_or(line + 8.0) }
         }
         Kind::Div => Size::ZERO,
     }

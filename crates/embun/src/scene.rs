@@ -24,6 +24,24 @@ pub(crate) struct Scene {
     pub content: Vec<Prim>,
     pub glass: Vec<GlassShape>,
     pub foreground: Vec<Prim>,
+    pub caret: Option<Caret>,
+}
+
+impl Scene {
+    /// How far the text of field `id` is shifted left to keep its caret visible.
+    pub(crate) fn caret_scroll(&self, id: u64) -> f32 {
+        self.caret.filter(|c| c.id == id).map_or(0.0, |c| c.scroll)
+    }
+}
+
+/// The caret and selection of the text field being edited, in logical
+/// pixels from the start of its text.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Caret {
+    pub id: u64,
+    pub x: f32,
+    pub selection: Option<(f32, f32)>,
+    pub scroll: f32,
 }
 
 /// Press and hover progress of a glass control, each 0 to 1.
@@ -41,8 +59,14 @@ const PRESS_BRIGHTEN: f32 = 0.14;
 /// Width of the keyboard focus ring and its gap from the control.
 const FOCUS_RING: f32 = 3.0;
 
-pub(crate) fn build<M>(nodes: &[Node<'_, M>], theme: &Theme, highlight: &HashMap<u64, Highlight>, focused: Option<u64>) -> Scene {
-    let mut scene = Scene { background: Some(theme.background()), ..Default::default() };
+pub(crate) fn build<M>(
+    nodes: &[Node<'_, M>],
+    theme: &Theme,
+    highlight: &HashMap<u64, Highlight>,
+    focused: Option<u64>,
+    caret: Option<&Caret>,
+) -> Scene {
+    let mut scene = Scene { background: Some(theme.background()), caret: caret.copied(), ..Default::default() };
     let mut next_group = 1u32 << 16;
     // Borders draw after the element's children, so a child that fills the
     // element (an image in a selected tile) cannot cover them. `end[i]` is
@@ -108,6 +132,43 @@ pub(crate) fn build<M>(nodes: &[Node<'_, M>], theme: &Theme, highlight: &HashMap
                 clip: node.clip,
             }),
             Kind::Image(image) => layer.push(Prim::Image { image: image.clone(), rect: node.rect, radius: s.radius, clip: node.clip }),
+            Kind::Input { value, placeholder } => {
+                let [x, y, w, h] = node.rect;
+                let fill = if node.on_glass.is_some() { theme.label().with_alpha(0.06) } else { theme.surface() };
+                layer.push(Prim::Rect {
+                    rect: node.rect,
+                    radius: s.radius,
+                    top: fill,
+                    bottom: fill,
+                    border: Some((1.0, theme.separator())),
+                    clip: node.clip,
+                });
+                let line = node.text.size * node.text.line_height;
+                let inner = [x + s.padding[3], y, w - s.padding[1] - s.padding[3], h];
+                let clip = crate::layout::intersect(node.clip, inner);
+                let caret = caret.filter(|c| c.id == node.id);
+                let left = inner[0] - caret.map_or(0.0, |c| c.scroll);
+                let top = y + (h - line) / 2.0;
+                if let Some((a, b)) = caret.and_then(|c| c.selection) {
+                    let sel = theme.accent().with_alpha(0.3);
+                    layer.push(Prim::Rect { rect: [left + a, top, b - a, line], radius: 0.0, top: sel, bottom: sel, border: None, clip });
+                }
+                let (shown, color) = if value.is_empty() { (placeholder, theme.secondary_label()) } else { (value, node.color) };
+                if !shown.is_empty() {
+                    layer.push(Prim::Text {
+                        text: shown.clone(),
+                        style: node.text.clone(),
+                        width: f32::INFINITY,
+                        origin: [left, top],
+                        color,
+                        clip,
+                    });
+                }
+                if let Some(c) = caret.filter(|c| c.selection.is_none()) {
+                    let ink = theme.accent();
+                    layer.push(Prim::Rect { rect: [left + c.x, top + 1.0, 1.5, line - 2.0], radius: 0.0, top: ink, bottom: ink, border: None, clip });
+                }
+            }
             Kind::Div => {}
         }
         if focused == Some(node.id) {
@@ -187,7 +248,7 @@ mod tests {
         let theme = Theme::default();
         let mut nodes = flatten(root, &theme);
         layout(&mut nodes, [400.0, 300.0], &mut TextSystem::new(), &HashMap::new());
-        (build(&nodes, &theme, highlight, None), nodes.iter().map(|n| n.id).collect())
+        (build(&nodes, &theme, highlight, None, None), nodes.iter().map(|n| n.id).collect())
     }
 
     #[test]

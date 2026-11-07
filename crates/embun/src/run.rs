@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::window::{Window, WindowId};
@@ -115,6 +115,8 @@ struct State<A: App> {
     config: wgpu::SurfaceConfiguration,
     instance: wgpu::Instance,
     modifiers: ModifiersState,
+    /// Opened on first use; `None` if the system clipboard is unavailable.
+    clipboard: Option<arboard::Clipboard>,
     last_frame: Instant,
     // Dropped last: the surface must go before its window.
     window: Arc<Window>,
@@ -178,6 +180,7 @@ impl<A: App + 'static> Shell<A> {
             config,
             instance,
             modifiers: ModifiersState::empty(),
+            clipboard: None,
             last_frame: Instant::now(),
             window,
         });
@@ -229,17 +232,41 @@ impl<A: App + 'static> ApplicationHandler for Shell<A> {
             }
             WindowEvent::ModifiersChanged(m) => s.modifiers = m.state(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                let key = match event.logical_key {
-                    WinitKey::Named(NamedKey::Tab) if s.modifiers.shift_key() => Some(Key::ShiftTab),
-                    WinitKey::Named(NamedKey::Tab) => Some(Key::Tab),
-                    WinitKey::Named(NamedKey::Enter | NamedKey::Space) => Some(Key::Activate),
+                let shift = s.modifiers.shift_key();
+                // Command on macOS, Control elsewhere.
+                let command = s.modifiers.super_key() || s.modifiers.control_key();
+                let editing = s.ui.is_editing();
+                let pick = |plain: Key, selecting: Key| Some(if shift { selecting } else { plain });
+                let key = match &event.logical_key {
+                    WinitKey::Named(NamedKey::Tab) => pick(Key::Tab, Key::ShiftTab),
                     WinitKey::Named(NamedKey::Escape) => Some(Key::Escape),
+                    WinitKey::Named(NamedKey::Enter | NamedKey::Space) if !editing => Some(Key::Activate),
+                    WinitKey::Named(NamedKey::Backspace) if editing => Some(Key::Backspace),
+                    WinitKey::Named(NamedKey::Delete) if editing => Some(Key::Delete),
+                    WinitKey::Named(NamedKey::ArrowLeft) if editing && command => pick(Key::Home, Key::SelectHome),
+                    WinitKey::Named(NamedKey::ArrowRight) if editing && command => pick(Key::End, Key::SelectEnd),
+                    WinitKey::Named(NamedKey::ArrowLeft) if editing => pick(Key::Left, Key::SelectLeft),
+                    WinitKey::Named(NamedKey::ArrowRight) if editing => pick(Key::Right, Key::SelectRight),
+                    WinitKey::Named(NamedKey::Home | NamedKey::ArrowUp) if editing => pick(Key::Home, Key::SelectHome),
+                    WinitKey::Named(NamedKey::End | NamedKey::ArrowDown) if editing => pick(Key::End, Key::SelectEnd),
+                    WinitKey::Character(c) if editing && command && c.eq_ignore_ascii_case("a") => Some(Key::SelectAll),
+                    WinitKey::Character(c) if editing && command => {
+                        clipboard(&mut s.clipboard, c, &mut s.ui);
+                        None
+                    }
                     _ => None,
                 };
                 if let Some(key) = key {
                     s.ui.key(key);
+                } else if editing
+                    && !command
+                    && let Some(text) = &event.text
+                {
+                    s.ui.insert_text(text);
                 }
             }
+            // Text composed with an input method, such as Japanese or Chinese.
+            WindowEvent::Ime(Ime::Commit(text)) => s.ui.insert_text(&text),
             WindowEvent::RedrawRequested => {
                 let now = Instant::now();
                 let dt = (now - s.last_frame).as_secs_f32().min(0.05);
@@ -253,9 +280,34 @@ impl<A: App + 'static> ApplicationHandler for Shell<A> {
             }
             _ => {}
         }
+        s.window.set_ime_allowed(s.ui.is_editing());
         if s.ui.needs_redraw() {
             s.window.request_redraw();
         }
+    }
+}
+
+/// Command-C, -X and -V in a text field.
+fn clipboard<A: App>(clipboard: &mut Option<arboard::Clipboard>, key: &str, ui: &mut Ui<A>) {
+    if clipboard.is_none() {
+        *clipboard = arboard::Clipboard::new().ok();
+    }
+    let Some(board) = clipboard.as_mut() else { return };
+    let copied = match key.to_ascii_lowercase().as_str() {
+        "c" => ui.selected_text(),
+        "x" => ui.cut(),
+        "v" => {
+            if let Ok(text) = board.get_text() {
+                ui.insert_text(&text);
+            }
+            None
+        }
+        _ => None,
+    };
+    if let Some(text) = copied
+        && let Err(e) = board.set_text(text)
+    {
+        eprintln!("embun: could not copy to the clipboard: {e}");
     }
 }
 

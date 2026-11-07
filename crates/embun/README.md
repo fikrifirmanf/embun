@@ -61,12 +61,13 @@ Pressing or hovering a glass button only changes the glass layer, so the frost b
 - Layout: rows, columns, padding, gap, grow, alignment, wrapping, absolute positioning and vertical scrolling, through [taffy](https://crates.io/crates/taffy).
 - Text in Inter, embedded so it measures the same everywhere. Inter is under the SIL Open Font License; see `fonts/OFL.txt`.
 - Images from RGBA8 pixels.
+- `text_input`: a single-line field your app owns the value of. Typing, Backspace and Delete, arrow keys, Home and End, Shift to select, Command-A, copy, cut and paste, clicking to place the cursor, and input methods for languages such as Japanese.
 - Controls: `button`, `icon_button`, prominent buttons, `toolbar_group` and `toolbar_item`, `sidebar`, `sidebar_item` and `sidebar_heading`. Button sizes follow the macOS 27.0.1 captures.
 - Pointer, scroll wheel and trackpad input. Tab and Shift-Tab move keyboard focus between buttons, and Space or Return presses the focused one.
 - Light and dark mode from the system, and glass that frosts more when the window loses focus, as on macOS.
 - `snapshot` renders an app into memory, for tests and screenshots.
 
-Not there yet: text input, menus and popovers, screen reader support and images from files.
+Not there yet: menus and popovers, screen reader support, multi-line text editing, moving the cursor word by word, and images from files. The cursor moves by character, so an emoji made of several characters takes several presses.
 
 ## Examples
 

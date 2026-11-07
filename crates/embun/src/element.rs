@@ -17,12 +17,16 @@ pub struct Element<M> {
     pub(crate) key: Option<String>,
     pub(crate) role: Role,
     pub(crate) label: Option<String>,
+    /// For text fields: turns the edited text into a message.
+    pub(crate) on_input: Option<Box<dyn Fn(String) -> M>>,
 }
 
 pub(crate) enum Kind {
     Div,
     Text(String),
     Image(Image),
+    /// A single-line text field showing `value`, or `placeholder` when empty.
+    Input { value: String, placeholder: String },
 }
 
 /// What an element is, for focus, keyboard activation and screen readers.
@@ -35,6 +39,7 @@ pub enum Role {
     Navigation,
     Heading,
     Image,
+    TextField,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -155,7 +160,24 @@ impl Image {
 }
 
 fn node<M>(kind: Kind) -> Element<M> {
-    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None }
+    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None }
+}
+
+/// A single-line text field. It shows `value`; when the user edits it,
+/// `on_change` turns the new text into a message for your `update`, which
+/// should store it so the next `view` passes it back.
+///
+/// Styled like a macOS text field: 28 px tall and 200 px wide unless you set
+/// `w`, `h` or `grow`.
+pub fn text_input<M: 'static>(value: impl Into<String>, on_change: impl Fn(String) -> M + 'static) -> Element<M> {
+    let mut e = node(Kind::Input { value: value.into(), placeholder: String::new() });
+    e.on_input = Some(Box::new(on_change));
+    e.role = Role::TextField;
+    e.style.width = Length::Px(200.0);
+    e.style.height = Length::Px(28.0);
+    e.style.padding = [0.0, 8.0, 0.0, 8.0];
+    e.style.radius = 7.0;
+    e
 }
 
 /// A box that stacks its children top to bottom.
@@ -254,6 +276,14 @@ impl<M> Element<M> {
 
     pub fn role(mut self, role: Role) -> Self {
         self.role = role;
+        self
+    }
+
+    /// Gray text a [`text_input`] shows while empty.
+    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
+        if let Kind::Input { placeholder: p, .. } = &mut self.kind {
+            *p = placeholder.into();
+        }
         self
     }
 

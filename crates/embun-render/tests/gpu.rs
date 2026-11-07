@@ -67,7 +67,7 @@ fn assert_near(actual: [u8; 3], expected: [u8; 3], tolerance: u8) {
 #[test]
 fn pixels_outside_glass_show_the_backdrop_unchanged() {
     let gpu = gpu();
-    let px = render(&gpu, [40, 80, 160], &[circle(100.0, 50.0, 30.0, 0.0)], GlassParams::from_level(1.0, GlassLayers::default(), false));
+    let px = render(gpu, [40, 80, 160], &[circle(100.0, 50.0, 30.0, 0.0)], GlassParams::from_level(1.0, GlassLayers::default(), false));
     assert_near(px(2, 2), [40, 80, 160], 1);
     assert_near(px(197, 97), [40, 80, 160], 1);
 }
@@ -99,7 +99,7 @@ fn glass_over_flat_backdrops_matches_macos_captures() {
     for (cases, make) in [(focused, GlassParams::from_level as Make), (unfocused, GlassParams::unfocused as Make)] {
         for (level, appearance, backdrop, macos) in cases {
             let shapes = [circle(100.0, 50.0, 40.0, appearance)];
-            let center = render(&gpu, backdrop, &shapes, make(level, GlassLayers::default(), false))(100, 50);
+            let center = render(gpu, backdrop, &shapes, make(level, GlassLayers::default(), false))(100, 50);
             assert_near(center, macos, 3);
         }
     }
@@ -110,13 +110,13 @@ fn outline_darkens_the_pixel_just_outside_like_macos() {
     let gpu = gpu();
     // A rectangle with edges on pixel boundaries: left edge x = 60, top edge y = 30.
     let shapes = [GlassShape { center: [100.0, 50.0], half_size: [40.0, 20.0], radius: 10.0, appearance: 0.0, ..Default::default() }];
-    let focused = render(&gpu, [242, 242, 247], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
+    let focused = render(gpu, [242, 242, 247], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
     // macOS clear, light, focused: 176 beside the left edge, 223 above the top edge.
     assert!(focused(59, 50)[1].abs_diff(176) <= 5, "left outline was {:?}", focused(59, 50));
     assert!(focused(100, 29)[1].abs_diff(223) <= 6, "top outline was {:?}", focused(100, 29));
     assert!(focused(57, 50)[1] >= 241, "two pixels out should be untouched, got {:?}", focused(57, 50));
     // Without focus: 178 beside the left edge, 200 above the top edge.
-    let unfocused = render(&gpu, [242, 242, 247], &shapes, GlassParams::unfocused(0.0, GlassLayers::default(), false));
+    let unfocused = render(gpu, [242, 242, 247], &shapes, GlassParams::unfocused(0.0, GlassLayers::default(), false));
     assert!(unfocused(59, 50)[1].abs_diff(178) <= 5, "left outline was {:?}", unfocused(59, 50));
     assert!(unfocused(100, 29)[1].abs_diff(200) <= 6, "top outline was {:?}", unfocused(100, 29));
 }
@@ -125,13 +125,13 @@ fn outline_darkens_the_pixel_just_outside_like_macos() {
 fn focused_glass_brightens_the_inside_of_its_top_edge_like_macos() {
     let gpu = gpu();
     let shapes = [GlassShape { center: [100.0, 50.0], half_size: [40.0, 20.0], radius: 10.0, appearance: 1.0, ..Default::default() }];
-    let px = render(&gpu, [28, 28, 30], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
+    let px = render(gpu, [28, 28, 30], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
     // macOS clear, dark, focused: 108 in the first pixel inside the top edge,
     // 87 in the second, against 59 inside; nothing extra inside the left edge.
     assert!(px(100, 30)[1].abs_diff(108) <= 6, "first row inside the top was {:?}", px(100, 30));
     assert!(px(100, 31)[1].abs_diff(87) <= 6, "second row inside the top was {:?}", px(100, 31));
     assert!(px(60, 50)[1].abs_diff(59) <= 4, "first column inside the left was {:?}", px(60, 50));
-    let unfocused = render(&gpu, [28, 28, 30], &shapes, GlassParams::unfocused(0.0, GlassLayers::default(), false));
+    let unfocused = render(gpu, [28, 28, 30], &shapes, GlassParams::unfocused(0.0, GlassLayers::default(), false));
     assert!(unfocused(100, 30)[1] < 60, "unfocused glass has no highlight, got {:?}", unfocused(100, 30));
 }
 
@@ -154,8 +154,8 @@ fn clear_glass_keeps_detail_on_its_own_side_of_the_frost_like_macos() {
     for (appearance, name) in [(0.0, "light"), (1.0, "dark")] {
         let shape = [GlassShape { center: [100.0, 50.0], half_size: [90.0, 45.0], radius: 20.0, appearance, ..Default::default() }];
         let params = GlassParams::from_level(level, GlassLayers::default(), false);
-        let over_stripes = render_image(&gpu, &stripes, &shape, params);
-        let over_mean = render(&gpu, [mean as u8; 3], &shape, params);
+        let over_stripes = render_image(gpu, &stripes, &shape, params);
+        let over_mean = render(gpu, [mean as u8; 3], &shape, params);
         let base = over_mean(100, 50)[1] as f32;
         // Pixel 100 sits on a dark stripe, pixel 102 on a bright one.
         let toward_dark = (base - over_stripes(100, 50)[1] as f32) / (mean - dark_stripe);
@@ -205,7 +205,7 @@ fn frost_follows_new_backdrop_content_after_regenerate_mips() {
     gpu.queue.submit([encoder.finish()]);
 
     // Same glass over a fresh backdrop of the new color.
-    let fresh = render(&gpu, [230, 230, 230], &shapes, GlassParams::from_level(1.0, GlassLayers::default(), false));
+    let fresh = render(gpu, [230, 230, 230], &shapes, GlassParams::from_level(1.0, GlassLayers::default(), false));
     assert_near(draw(), fresh(100, 50), 1);
 }
 
@@ -214,9 +214,9 @@ fn close_shapes_merge_only_when_merging_is_on() {
     let gpu = gpu();
     // Two circles with a 6 px gap between them, centered on (123, 50).
     let shapes = [circle(100.0, 50.0, 20.0, 0.0), circle(146.0, 50.0, 20.0, 0.0)];
-    let merged = render(&gpu, [20, 20, 20], &shapes, GlassParams::from_level(1.0, GlassLayers::default(), false))(123, 50);
+    let merged = render(gpu, [20, 20, 20], &shapes, GlassParams::from_level(1.0, GlassLayers::default(), false))(123, 50);
     let apart = GlassLayers { merge: false, ..GlassLayers::default() };
-    let separate = render(&gpu, [20, 20, 20], &shapes, GlassParams::from_level(1.0, apart, false))(123, 50);
+    let separate = render(gpu, [20, 20, 20], &shapes, GlassParams::from_level(1.0, apart, false))(123, 50);
     assert!(merged[1] > 150, "gap should be filled with glass when merging, got {merged:?}");
     assert_near(separate, [20, 20, 20], 1);
 }
@@ -232,7 +232,7 @@ fn merged_neck_has_no_seam() {
     }
     let shapes = [circle(100.0, 50.0, 20.0, 0.0), circle(146.0, 50.0, 20.0, 0.0)];
     let no_frost = GlassLayers { frost: false, fringe: false, ..GlassLayers::default() };
-    let px = render_image(&gpu, &image, &shapes, GlassParams::from_level(0.0, no_frost, false));
+    let px = render_image(gpu, &image, &shapes, GlassParams::from_level(0.0, no_frost, false));
     // The neck's center is x = 123. Two pixels apart, the ramp moves by about
     // two steps; lensing that flips sides at the center would jump by ~20.
     let (left, right) = (px(122, 50)[0], px(124, 50)[0]);
@@ -244,8 +244,8 @@ fn optional_shadow_darkens_the_backdrop_just_below_a_shape() {
     let gpu = gpu();
     let shapes = [circle(100.0, 40.0, 30.0, 0.0)];
     let shadow = GlassLayers { shadow: true, ..GlassLayers::default() };
-    let with = render(&gpu, [200, 200, 200], &shapes, GlassParams::from_level(0.5, shadow, false))(100, 74);
-    let without = render(&gpu, [200, 200, 200], &shapes, GlassParams::from_level(0.5, GlassLayers::default(), false))(100, 74);
+    let with = render(gpu, [200, 200, 200], &shapes, GlassParams::from_level(0.5, shadow, false))(100, 74);
+    let without = render(gpu, [200, 200, 200], &shapes, GlassParams::from_level(0.5, GlassLayers::default(), false))(100, 74);
     assert_near(without, [200, 200, 200], 1);
     assert!(with[1] + 10 < without[1], "shadow {with:?} should be darker than {without:?}");
 }
@@ -297,15 +297,15 @@ fn prominent_glass_matches_macos_and_loses_its_color_without_focus() {
     let gpu = gpu();
     for (level, appearance, backdrop, tint, macos) in cases {
         let shapes = [circle(100.0, 50.0, 40.0, appearance).tint(tint, 1.0)];
-        let center = render(&gpu, backdrop, &shapes, GlassParams::from_level(level, GlassLayers::default(), false))(100, 50);
+        let center = render(gpu, backdrop, &shapes, GlassParams::from_level(level, GlassLayers::default(), false))(100, 50);
         // The tint model is one least-squares fit over photo, checker, noise
         // and flat backdrops; its RMS error is up to 5 out of 255 (dark, clear).
         assert_near(center, macos, 5);
     }
     // A window without focus draws the same button as plain glass.
     let unfocused = GlassParams::unfocused(0.5, GlassLayers::default(), false);
-    let tinted = render(&gpu, light, &[circle(100.0, 50.0, 40.0, 0.0).tint(blue, 1.0)], unfocused)(100, 50);
-    let plain = render(&gpu, light, &[circle(100.0, 50.0, 40.0, 0.0)], unfocused)(100, 50);
+    let tinted = render(gpu, light, &[circle(100.0, 50.0, 40.0, 0.0).tint(blue, 1.0)], unfocused)(100, 50);
+    let plain = render(gpu, light, &[circle(100.0, 50.0, 40.0, 0.0)], unfocused)(100, 50);
     assert_eq!(tinted, plain);
 }
 
@@ -316,8 +316,8 @@ fn shapes_in_different_merge_groups_do_not_merge() {
     let params = GlassParams::from_level(1.0, GlassLayers::default(), false);
     let grouped = [circle(100.0, 50.0, 20.0, 0.0), circle(146.0, 50.0, 20.0, 0.0)];
     let apart = [circle(100.0, 50.0, 20.0, 0.0), circle(146.0, 50.0, 20.0, 0.0).group(1)];
-    let merged = render(&gpu, [20, 20, 20], &grouped, params);
-    let separate = render(&gpu, [20, 20, 20], &apart, params);
+    let merged = render(gpu, [20, 20, 20], &grouped, params);
+    let separate = render(gpu, [20, 20, 20], &apart, params);
     assert!(merged(123, 50)[1] > 150, "same group should fill the gap, got {:?}", merged(123, 50));
     assert_near(separate(123, 50), [20, 20, 20], 1);
     // Both shapes are still drawn in full.
@@ -332,8 +332,8 @@ fn a_tinted_shape_does_not_tint_a_separate_neighbor() {
     let params = GlassParams::from_level(0.5, GlassLayers::default(), false);
     let blue = [0.0, 0.52, 0.98];
     let plain = circle(100.0, 50.0, 20.0, 0.0);
-    let alone = render(&gpu, [230, 230, 230], &[plain], params);
-    let beside = render(&gpu, [230, 230, 230], &[plain, circle(146.0, 50.0, 20.0, 0.0).tint(blue, 1.0).group(1)], params);
+    let alone = render(gpu, [230, 230, 230], &[plain], params);
+    let beside = render(gpu, [230, 230, 230], &[plain, circle(146.0, 50.0, 20.0, 0.0).tint(blue, 1.0).group(1)], params);
     // The plain circle's edge nearest the blue one, and its center.
     for x in [100, 117] {
         assert_near(beside(x, 50), alone(x, 50), 1);
@@ -419,9 +419,9 @@ fn shapes_with_nan_or_infinite_values_are_skipped() {
     let gpu = gpu();
     let params = GlassParams::from_level(1.0, GlassLayers::default(), false);
     let good = circle(60.0, 50.0, 20.0, 0.0);
-    let alone = render(&gpu, [20, 20, 20], &[good], params);
+    let alone = render(gpu, [20, 20, 20], &[good], params);
     let bad = [circle(f32::NAN, 50.0, 20.0, 0.0), GlassShape { half_size: [f32::INFINITY, 20.0], ..circle(140.0, 50.0, 20.0, 0.0) }];
-    let mixed = render(&gpu, [20, 20, 20], &[bad[0], good, bad[1]], params);
+    let mixed = render(gpu, [20, 20, 20], &[bad[0], good, bad[1]], params);
     for (x, y) in [(60, 50), (140, 50), (100, 50), (5, 5)] {
         assert_eq!(mixed(x, y), alone(x, y), "pixel ({x}, {y})");
     }
@@ -432,8 +432,8 @@ fn an_infinite_radius_draws_a_capsule() {
     let gpu = gpu();
     let params = GlassParams::from_level(1.0, GlassLayers::default(), false);
     let capsule = |radius| [GlassShape::new([100.0, 50.0], [60.0, 20.0], radius)];
-    let infinite = render(&gpu, [20, 20, 20], &capsule(f32::INFINITY), params);
-    let half_height = render(&gpu, [20, 20, 20], &capsule(20.0), params);
+    let infinite = render(gpu, [20, 20, 20], &capsule(f32::INFINITY), params);
+    let half_height = render(gpu, [20, 20, 20], &capsule(20.0), params);
     for (x, y) in [(100, 50), (45, 50), (41, 38), (155, 50)] {
         assert_eq!(infinite(x, y), half_height(x, y), "pixel ({x}, {y})");
     }
@@ -448,7 +448,7 @@ fn up_to_max_shapes_are_drawn_and_the_rest_ignored() {
     // A 13 x 5 grid of 6 px circles, one more than the limit.
     let shapes: Vec<GlassShape> =
         (0..MAX_SHAPES + 1).map(|i| circle(10.0 + (i % 13) as f32 * 15.0, 10.0 + (i / 13) as f32 * 20.0, 6.0, 0.0)).collect();
-    let px = render(&gpu, [20, 20, 20], &shapes, params);
+    let px = render(gpu, [20, 20, 20], &shapes, params);
     let at = |i: usize| px(10 + (i % 13) as u32 * 15, 10 + (i / 13) as u32 * 20);
     assert!(at(MAX_SHAPES - 1)[1] > 150, "shape {} should be glass, got {:?}", MAX_SHAPES - 1, at(MAX_SHAPES - 1));
     assert_near(at(MAX_SHAPES), [20, 20, 20], 1);

@@ -9,6 +9,7 @@ pub struct Library {
     pub album: usize,
     pub favorites: Vec<bool>,
     pub selected: Option<usize>,
+    pub query: String,
 }
 
 #[derive(Clone, Debug)]
@@ -17,6 +18,7 @@ pub enum Msg {
     Select(usize),
     Favorite,
     Share,
+    Search(String),
 }
 
 pub const ALBUMS: [&str; 4] = ["All Photos", "Favorites", "Travel", "Family"];
@@ -25,7 +27,7 @@ impl Library {
     pub fn new() -> Self {
         let photos: Vec<Image> = (0..12).map(|i| landscape(i, 320, 240)).collect();
         let favorites = vec![false; photos.len()];
-        Self { photos, album: 0, favorites, selected: Some(4) }
+        Self { photos, album: 0, favorites, selected: Some(4), query: String::new() }
     }
 }
 
@@ -42,6 +44,7 @@ impl App for Library {
                 }
             }
             Msg::Share => {}
+            Msg::Search(query) => self.query = query,
         }
     }
 
@@ -84,6 +87,11 @@ impl App for Library {
             )
             .child(text(ALBUMS[self.album]).text_size(15.0).font_semibold())
             .child(spacer())
+            .child(
+                toolbar_group()
+                    .px_1()
+                    .child(text_input(self.query.clone(), Msg::Search).placeholder("Search").w(180.0).rounded_full().key("search").label("Search")),
+            )
             .child(toolbar_group().child(toolbar_item(if favorite { "♥" } else { "♡" }, Msg::Favorite).key("favorite").label("Favorite")))
             .child(button("Share").size(ControlSize::Large).prominent().on_press(Msg::Share).key("share"));
 

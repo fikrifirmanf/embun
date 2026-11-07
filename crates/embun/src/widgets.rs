@@ -214,7 +214,7 @@ mod tests {
             let theme = Theme::default();
             let mut nodes = flatten(&root, &theme);
             layout(&mut nodes, [400.0, 200.0], &mut TextSystem::new(), &HashMap::new());
-            let scene = build(&nodes, &theme, &HashMap::new(), None);
+            let scene = build(&nodes, &theme, &HashMap::new(), None, None);
             let glass = scene.glass[0];
             assert_eq!(glass.half_size[1] * 2.0, height, "{size:?}");
             assert_eq!(glass.radius.min(glass.half_size[1]), radius, "{size:?}");
@@ -227,7 +227,7 @@ mod tests {
         let theme = Theme::default();
         let mut nodes = flatten(&root, &theme);
         layout(&mut nodes, [400.0, 300.0], &mut TextSystem::new(), &HashMap::new());
-        let scene = build(&nodes, &theme, &HashMap::new(), None);
+        let scene = build(&nodes, &theme, &HashMap::new(), None, None);
         let fills: Vec<[f32; 4]> = scene.foreground.iter().filter_map(|p| match p {
             crate::scene::Prim::Rect { rect, .. } => Some(*rect),
             _ => None,
@@ -242,7 +242,7 @@ mod tests {
         for theme in [Theme::default(), Theme { appearance: crate::Appearance::Dark, ..Theme::default() }] {
             let mut nodes = flatten(&root, &theme);
             layout(&mut nodes, [400.0, 200.0], &mut TextSystem::new(), &HashMap::new());
-            let tint = build(&nodes, &theme, &HashMap::new(), None).glass[0].tint;
+            let tint = build(&nodes, &theme, &HashMap::new(), None, None).glass[0].tint;
             let accent = theme.accent();
             assert_eq!(tint, [accent.r, accent.g, accent.b, 1.0]);
         }

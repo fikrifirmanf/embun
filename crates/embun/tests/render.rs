@@ -49,8 +49,8 @@ fn render(gpu: &Gpu, theme: Theme, view: fn(&Theme) -> Element<()>) -> impl Fn(u
 #[test]
 fn the_background_follows_the_appearance() {
     let gpu = gpu();
-    let light = render(&gpu, Theme::default(), |_| div());
-    let dark = render(&gpu, Theme { appearance: Appearance::Dark, ..Theme::default() }, |_| div());
+    let light = render(gpu, Theme::default(), |_| div());
+    let dark = render(gpu, Theme { appearance: Appearance::Dark, ..Theme::default() }, |_| div());
     assert_eq!(light(10, 10), [242, 242, 247]);
     assert_eq!(dark(10, 10), [28, 28, 30]);
 }
@@ -58,7 +58,7 @@ fn the_background_follows_the_appearance() {
 #[test]
 fn content_rects_images_and_text_are_drawn() {
     let gpu = gpu();
-    let px = render(&gpu, Theme::default(), |_| {
+    let px = render(gpu, Theme::default(), |_| {
         let red = Image::from_rgba(2, 2, [255, 0, 0, 255].repeat(4));
         row()
             .gap_2()
@@ -77,7 +77,7 @@ fn content_rects_images_and_text_are_drawn() {
 #[test]
 fn a_prominent_button_is_accent_blue_with_a_white_label() {
     let gpu = gpu();
-    let px = render(&gpu, Theme::default(), |_| {
+    let px = render(gpu, Theme::default(), |_| {
         column().items_center().justify_center().child(button("Save").size(ControlSize::ExtraLarge).prominent())
     });
     // Away from the label, the button body is the tinted glass: close to the
@@ -98,7 +98,7 @@ fn glass_shows_the_content_behind_it_frosted() {
             .child(row().h_full().children((0..20).map(|i| div().w(10.0).h_full().bg(if i % 2 == 0 { Color::BLACK } else { Color::WHITE }))))
             .child(div().absolute().top(20.0).left(40.0).size(120.0, 60.0).rounded(12.0).glass())
     };
-    let px = render(&gpu, Theme::default(), view);
+    let px = render(gpu, Theme::default(), view);
     // Outside the glass the stripes are sharp.
     assert_eq!(px(5, 5), [0, 0, 0]);
     assert_eq!(px(15, 5), [255, 255, 255]);
