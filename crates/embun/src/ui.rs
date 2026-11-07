@@ -116,6 +116,10 @@ pub struct Ui<A: App> {
     pressed: Option<u64>,
     focused: Option<u64>,
     edit: Option<Edit>,
+    /// Rects and clips from the last layout, in pre-order. Hover, press,
+    /// focus and caret changes reuse them; anything that can move elements
+    /// clears them.
+    layout_cache: Option<(Vec<Rect4>, Vec<Rect4>)>,
     /// The topmost overlay with an `on_press`: Escape and clicks outside it send its message.
     dismiss: Option<u64>,
     access: Vec<AccessNode>,
@@ -146,6 +150,7 @@ impl<A: App> Ui<A> {
             pressed: None,
             focused: None,
             edit: None,
+            layout_cache: None,
             dismiss: None,
             access: Vec::new(),
             highlight: HashMap::new(),
@@ -166,6 +171,7 @@ impl<A: App> Ui<A> {
     pub fn send(&mut self, message: A::Message) {
         self.app.update(message);
         self.view = None;
+        self.layout_cache = None;
         self.dirty = true;
     }
 
@@ -173,6 +179,7 @@ impl<A: App> Ui<A> {
         if theme != self.theme {
             self.theme = theme;
             self.view = None;
+            self.layout_cache = None;
             self.dirty = true;
         }
     }
@@ -181,6 +188,7 @@ impl<A: App> Ui<A> {
     pub fn resize(&mut self, viewport: [f32; 2]) {
         if viewport != self.viewport {
             self.viewport = viewport;
+            self.layout_cache = None;
             self.dirty = true;
         }
     }
@@ -206,7 +214,18 @@ impl<A: App> Ui<A> {
         }
         let view = self.view.as_ref().expect("view");
         let mut nodes = layout::flatten(view, &self.theme);
-        self.scroll_info = layout::layout(&mut nodes, self.viewport, &mut self.text, &self.scroll);
+        match &self.layout_cache {
+            Some((rects, clips)) if rects.len() == nodes.len() => {
+                for ((n, rect), clip) in nodes.iter_mut().zip(rects).zip(clips) {
+                    n.rect = *rect;
+                    n.clip = *clip;
+                }
+            }
+            _ => {
+                self.scroll_info = layout::layout(&mut nodes, self.viewport, &mut self.text, &self.scroll);
+                self.layout_cache = Some((nodes.iter().map(|n| n.rect).collect(), nodes.iter().map(|n| n.clip).collect()));
+            }
+        }
 
         self.targets.clear();
         self.messages.clear();
@@ -602,6 +621,7 @@ impl<A: App> Ui<A> {
         let next = (*offset + delta).clamp(0.0, max);
         if next != *offset {
             *offset = next;
+            self.layout_cache = None;
             self.dirty = true;
         }
     }
@@ -800,6 +820,18 @@ mod tests {
         let sub = ui.rect_of_key("sub").expect("sub button");
         click(&mut ui, [sub[0] + 2.0, sub[1] + 2.0]);
         assert_eq!(ui.app().count, 1);
+    }
+
+    #[test]
+    fn hover_reuses_the_layout_but_resizing_redoes_it() {
+        let mut ui = ui();
+        let before = ui.rect_of_key("add").expect("add");
+        ui.pointer_moved(center(before));
+        ui.update();
+        assert_eq!(ui.rect_of_key("add"), Some(before), "hovering does not move anything");
+        ui.resize([400.0, 200.0]);
+        let after = ui.rect_of_key("add").expect("add");
+        assert_eq!(after[2], before[2] + 200.0, "the stretched button follows the new width");
     }
 
     #[test]

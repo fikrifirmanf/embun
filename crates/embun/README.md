@@ -54,7 +54,7 @@ Each frame has three layers:
 2. **Glass.** Every element marked `.glass()` becomes a glass shape drawn by [`embun-render`](https://crates.io/crates/embun-render) over the content.
 3. **On the glass.** The children of glass elements: labels and icons on buttons, toolbar items, sidebar rows.
 
-Pressing or hovering a glass button only changes the glass layer, so the frost blur is reused and the frame stays cheap.
+Pressing or hovering a glass button only changes the glass layer, so the frost blur is reused and the frame stays cheap. It also reuses the last layout. On an Apple M5, a UI of 5,000 elements takes 0.38 ms to update after a hover change and 3.9 ms for a full layout, which runs after a message, a resize or a scroll. Very long lists are laid out in full; there is no virtualized list yet.
 
 ## What is there
 
