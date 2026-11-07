@@ -13,7 +13,7 @@ pub mod offscreen;
 mod params;
 mod renderer;
 
-pub use params::{Body, DEFAULT_LEVEL, GlassLayers, GlassParams};
+pub use params::{Body, DEFAULT_LEVEL, GlassLayers, GlassParams, Tint};
 pub use renderer::{Backdrop, Frame, GlassRenderer, GlassShape, MAX_SHAPES};
 
 /// Compiles the README example as a doctest.

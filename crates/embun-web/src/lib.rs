@@ -118,7 +118,7 @@ impl EmbunView {
             .0
             .iter()
             .take(MAX_SHAPES)
-            .map(|s| GlassShape { center: [s[0], s[1]], half_size: [s[2], s[3]], radius: s[4], appearance: s[5] })
+            .map(|s| GlassShape::new([s[0], s[1]], [s[2], s[3]], s[4]).appearance(s[5]))
             .collect();
     }
 

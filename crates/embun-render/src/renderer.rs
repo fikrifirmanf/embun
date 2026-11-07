@@ -3,7 +3,7 @@ use bytemuck::{Pod, Zeroable};
 use crate::GlassParams;
 
 /// Maximum number of glass shapes drawn in one frame. Extra shapes are ignored.
-pub const MAX_SHAPES: usize = 16;
+pub const MAX_SHAPES: usize = 64;
 
 /// Width of the lensing band inside each shape's rim, in logical pixels.
 /// Below this blur sigma (logical pixels) the glass shows the backdrop unblurred.
@@ -11,6 +11,9 @@ pub const MAX_SHAPES: usize = 16;
 const MIN_BLUR_SIGMA: f32 = 0.25;
 
 /// One glass shape in logical pixels.
+///
+/// Build one with [`GlassShape::new`] and the setters, or with a struct
+/// literal ending in `..Default::default()`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GlassShape {
     pub center: [f32; 2],
@@ -19,6 +22,43 @@ pub struct GlassShape {
     pub radius: f32,
     /// 0 = light glass, 1 = dark glass. Values in between blend.
     pub appearance: f32,
+    /// Tint color, sRGB-encoded from 0 to 1, and its strength from 0 (plain
+    /// glass) to 1 (a prominent button). Pass the color for the current
+    /// appearance: macOS uses a lighter blue in dark mode.
+    pub tint: [f32; 4],
+    /// Merge group. Shapes in the same group melt together when they come
+    /// close; shapes in different groups only touch.
+    pub group: u32,
+}
+
+impl Default for GlassShape {
+    fn default() -> Self {
+        Self { center: [0.0; 2], half_size: [0.0; 2], radius: 0.0, appearance: 0.0, tint: [0.0; 4], group: 0 }
+    }
+}
+
+impl GlassShape {
+    /// A light, untinted shape in merge group 0.
+    pub fn new(center: [f32; 2], half_size: [f32; 2], radius: f32) -> Self {
+        Self { center, half_size, radius, ..Self::default() }
+    }
+
+    /// 0 = light glass, 1 = dark glass.
+    pub fn appearance(mut self, appearance: f32) -> Self {
+        self.appearance = appearance;
+        self
+    }
+
+    /// Tints the glass with an sRGB color (0 to 1 per channel) at `strength`.
+    pub fn tint(mut self, rgb: [f32; 3], strength: f32) -> Self {
+        self.tint = [rgb[0], rgb[1], rgb[2], strength];
+        self
+    }
+
+    pub fn group(mut self, group: u32) -> Self {
+        self.group = group;
+        self
+    }
 }
 
 /// Everything that changes per frame.
@@ -56,7 +96,7 @@ struct Uniforms {
     output_gamma: f32,
     bevel: f32,
     blur_lod: f32,
-    _pad1: f32,
+    tint_on: f32,
     /// offset, gain, curve, chroma
     body_light: [f32; 4],
     body_dark: [f32; 4],
@@ -66,8 +106,12 @@ struct Uniforms {
     edges: [f32; 4],
     /// blend weight, light then dark; two unused
     blend: [f32; 4],
+    /// tint amount, offset, gain, curve
+    tint_light: [f32; 4],
+    tint_dark: [f32; 4],
     shapes: [[f32; 4]; MAX_SHAPES],
     extra: [[f32; 4]; MAX_SHAPES],
+    tints: [[f32; 4]; MAX_SHAPES],
 }
 
 #[repr(C)]
@@ -105,6 +149,10 @@ pub struct Backdrop {
     /// Mip level and sigma of the blur already in the frost textures, or
     /// `None` after the content changed. Lets `render` skip the blur.
     blurred: std::sync::Mutex<Option<(usize, f32)>>,
+    /// This backdrop's glass and blur uniforms, so frames over different
+    /// backdrops can share one encoder.
+    uniform_buffer: wgpu::Buffer,
+    blur_buffers: [wgpu::Buffer; 2],
     size: [u32; 2],
 }
 
@@ -128,9 +176,7 @@ pub struct GlassRenderer {
     glass_pipeline: wgpu::RenderPipeline,
     blur_pipeline: wgpu::RenderPipeline,
     blur_layout: wgpu::BindGroupLayout,
-    blur_buffers: [wgpu::Buffer; 2],
     glass_layout: wgpu::BindGroupLayout,
-    uniform_buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
     mip_pipeline: wgpu::RenderPipeline,
     mip_layout: wgpu::BindGroupLayout,
@@ -200,21 +246,6 @@ impl GlassRenderer {
         let glass_pipeline = pipeline(device, "embun glass", &glass_shader, ("vs_shape", "fs"), &glass_layout, target_format);
         let mip_pipeline = pipeline(device, "embun mip", &mip_shader, ("vs", "fs"), &mip_layout, Backdrop::FORMAT);
         let blur_pipeline = pipeline(device, "embun blur", &blur_shader, ("vs", "fs"), &blur_layout, BLUR_FORMAT);
-        let blur_buffers = ["embun blur horizontal", "embun blur vertical"].map(|label| {
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some(label),
-                size: size_of::<BlurUniforms>() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            })
-        });
-
-        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("embun glass uniforms"),
-            size: size_of::<Uniforms>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("embun backdrop"),
@@ -237,9 +268,7 @@ impl GlassRenderer {
             glass_pipeline,
             blur_pipeline,
             blur_layout,
-            blur_buffers,
             glass_layout,
-            uniform_buffer,
             sampler,
             mip_pipeline,
             mip_layout,
@@ -303,6 +332,17 @@ impl GlassRenderer {
                 view_formats: &[],
             })
         };
+        let uniform_buffer = |label, size: usize| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: size as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
+        let glass_uniforms = uniform_buffer("embun glass uniforms", size_of::<Uniforms>());
+        let blur_buffers = ["embun blur horizontal", "embun blur vertical"]
+            .map(|label| uniform_buffer(label, size_of::<BlurUniforms>()));
         let half = blur_texture("embun blur half");
         let full = blur_texture("embun blur full");
         let level_view = |t: &wgpu::Texture, level| {
@@ -324,8 +364,8 @@ impl GlassRenderer {
                 let half_view = level_view(&half, level);
                 let full_view = level_view(&full, level);
                 BlurLevel {
-                    horizontal: blur_group(&self.blur_buffers[0], &level_view(&texture, level)),
-                    vertical: blur_group(&self.blur_buffers[1], &half_view),
+                    horizontal: blur_group(&blur_buffers[0], &level_view(&texture, level)),
+                    vertical: blur_group(&blur_buffers[1], &half_view),
                     half_view,
                     full_view,
                     size: [(width >> level).max(1), (height >> level).max(1)],
@@ -339,7 +379,7 @@ impl GlassRenderer {
             label: Some("embun glass"),
             layout: &self.glass_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: self.uniform_buffer.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 0, resource: glass_uniforms.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
                 wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sampler) },
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&full_all) },
@@ -366,10 +406,12 @@ impl GlassRenderer {
             blur_levels,
             mip_steps,
             blurred: std::sync::Mutex::new(None),
+            uniform_buffer: glass_uniforms,
+            blur_buffers,
             size: [width, height],
         };
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("embun mips") });
-        self.regenerate_mips(device, &mut encoder, &backdrop);
+        self.regenerate_mips(&mut encoder, &backdrop);
         queue.submit([encoder.finish()]);
         backdrop
     }
@@ -377,7 +419,7 @@ impl GlassRenderer {
     /// Rebuilds mip levels 1.. from level 0. Call after drawing new content
     /// into the backdrop; it also tells the next [`GlassRenderer::render`] to
     /// blur the new content for the frost.
-    pub fn regenerate_mips(&self, _device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, backdrop: &Backdrop) {
+    pub fn regenerate_mips(&self, encoder: &mut wgpu::CommandEncoder, backdrop: &Backdrop) {
         for (group, dst) in &backdrop.mip_steps {
             let mut pass = begin_pass(encoder, "embun mip", dst);
             pass.set_pipeline(&self.mip_pipeline);
@@ -389,10 +431,11 @@ impl GlassRenderer {
 
     /// Draws the backdrop and the glass shapes into `target`, replacing its contents.
     ///
-    /// Uses one set of uniform buffers, so submit the encoder before calling
-    /// `render` again. The frost blur is kept from the previous call until the
-    /// blur size changes or [`GlassRenderer::regenerate_mips`] reports new
-    /// content, so submit every encoder `render` records into.
+    /// Each backdrop has one set of uniform buffers: frames over different
+    /// backdrops can share an encoder, but submit before rendering over the
+    /// same backdrop again. The frost blur is kept from the previous call
+    /// until the blur size changes or [`GlassRenderer::regenerate_mips`]
+    /// reports new content, so submit every encoder `render` records into.
     pub fn render(
         &self,
         queue: &wgpu::Queue,
@@ -403,7 +446,7 @@ impl GlassRenderer {
     ) {
         let mut uniforms = self.uniforms(backdrop, frame);
         uniforms.blur_lod = self.blur(queue, encoder, backdrop, frame);
-        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+        queue.write_buffer(&backdrop.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
         let mut pass = begin_pass(encoder, "embun glass", target);
         pass.set_bind_group(0, &backdrop.bind_group, &[]);
         pass.set_pipeline(&self.backdrop_pipeline);
@@ -435,7 +478,7 @@ impl GlassRenderer {
             (&blur.horizontal, &blur.half_view, [1.0 / blur.size[0] as f32, 0.0], 1.0),
             (&blur.vertical, &blur.full_view, [0.0, 1.0 / blur.size[1] as f32], 0.0),
         ];
-        for ((group, target, step, to_gamma), buffer) in passes.into_iter().zip(&self.blur_buffers) {
+        for ((group, target, step, to_gamma), buffer) in passes.into_iter().zip(&backdrop.blur_buffers) {
             let u = BlurUniforms { step, sigma: level_sigma, to_gamma };
             queue.write_buffer(buffer, 0, bytemuck::bytes_of(&u));
             let mut pass = begin_pass(encoder, "embun blur", target);
@@ -447,16 +490,19 @@ impl GlassRenderer {
     }
 
     fn uniforms(&self, backdrop: &Backdrop, frame: &Frame<'_>) -> Uniforms {
-        let shapes = &frame.shapes[..frame.shapes.len().min(MAX_SHAPES)];
+        // Sorted by group, so the shader can merge each group in one run.
+        let mut shapes: Vec<&GlassShape> = frame.shapes.iter().filter(|s| is_drawable(s)).take(MAX_SHAPES).collect();
+        shapes.sort_by_key(|s| s.group);
         let mut out = Uniforms::zeroed();
         for (i, s) in shapes.iter().enumerate() {
             out.shapes[i] = [s.center[0], s.center[1], s.half_size[0].max(0.0), s.half_size[1].max(0.0)];
-            out.extra[i] = [s.radius.max(0.0), s.appearance.clamp(0.0, 1.0), 0.0, 0.0];
+            out.extra[i] = [s.radius.max(0.0), s.appearance.clamp(0.0, 1.0), s.group as f32, 0.0];
+            out.tints[i] = s.tint.map(|c| if c.is_finite() { c.clamp(0.0, 1.0) } else { 0.0 });
         }
         let p = frame.params;
-        out.viewport = frame.viewport;
         out.backdrop_size = [backdrop.size[0] as f32, backdrop.size[1] as f32];
-        out.scale_factor = frame.scale_factor.max(0.01);
+        out.viewport = frame.viewport.map(|v| if v.is_finite() { v.max(1.0) } else { 1.0 });
+        out.scale_factor = if frame.scale_factor.is_finite() { frame.scale_factor.max(0.01) } else { 1.0 };
         out.backdrop_scale = frame.backdrop_scale;
         out.scroll = frame.scroll.rem_euclid(backdrop.size[1] as f32);
         out.shape_count = shapes.len() as u32;
@@ -474,10 +520,22 @@ impl GlassRenderer {
         out.sharp = [p.light.sharp_gain, p.light.sharp_chroma, p.dark.sharp_gain, p.dark.sharp_chroma];
         out.edges = [p.outline_ends[0], p.outline_ends[1], p.highlight[0], p.highlight[1]];
         out.blend = [p.light.blend, p.dark.blend, 0.0, 0.0];
+        if let Some([light, dark]) = p.tint {
+            let tint = |t: crate::Tint| [t.amount, t.offset, t.gain, t.curve];
+            out.tint_on = 1.0;
+            out.tint_light = tint(light);
+            out.tint_dark = tint(dark);
+        }
         out.output_gamma = if self.output_gamma { 1.0 } else { 0.0 };
         out.bevel = p.bevel.max(0.01);
         out
     }
+}
+
+/// A shape with any NaN or infinite geometry would cover the screen with NaN;
+/// it is dropped instead.
+fn is_drawable(s: &GlassShape) -> bool {
+    s.center.iter().chain(&s.half_size).chain([&s.radius, &s.appearance]).all(|v| v.is_finite())
 }
 
 /// A pipeline with no vertex buffers that replaces what it draws over.

@@ -1,6 +1,6 @@
-// Glass pass: one fullscreen triangle. Pixels outside every shape show the
-// backdrop; pixels inside are frosted, lensed and recolored, and a one-pixel
-// outline sits just outside the shape. Frost and color math run on
+// Glass pass: a fullscreen triangle copies the backdrop, then one quad per
+// shape runs the glass shader near that shape. Pixels inside a shape are
+// frosted, lensed and recolored, and a one-pixel outline sits just outside it. Frost and color math run on
 // sRGB-encoded values, which fits the macOS 27 captures better than linear.
 
 struct Uniforms {
@@ -21,15 +21,24 @@ struct Uniforms {
     output_gamma: f32,      // 1 when the target is not an sRGB format
     bevel: f32,             // logical px
     blur_lod: f32,          // mip level that holds the blurred backdrop
-    _pad1: f32,
+    tint_on: f32,           // 1 when tinted shapes show their tint
     body_light: vec4f,      // offset, gain, curve, chroma
     body_dark: vec4f,
     sharp: vec4f,           // sharp gain, sharp chroma: light .xy, dark .zw
     edges: vec4f,           // outline at the ends (light, dark), highlight (light, dark)
     blend: vec4f,           // lighten/darken blend weight (light, dark), unused, unused
-    shapes: array<vec4f, 16>, // center.xy, half_size.xy
-    extra: array<vec4f, 16>,  // radius, appearance (0 light, 1 dark), unused, unused
+    tint_light: vec4f,      // tint body: amount, offset, gain, curve
+    tint_dark: vec4f,
+    // Shapes sorted by merge group.
+    shapes: array<vec4f, 64>, // center.xy, half_size.xy
+    extra: array<vec4f, 64>,  // radius, appearance (0 light, 1 dark), merge group, unused
+    tints: array<vec4f, 64>,  // tint color (sRGB-encoded), strength
 };
+
+// The shapes close enough to the current pixel to change it, in group order.
+// Filled once per pixel by gather_near; scene() and style_at() loop over these.
+var<private> near: array<u32, 64>;
+var<private> near_count: u32;
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var backdrop: texture_2d<f32>;
@@ -102,26 +111,63 @@ fn smin(a: f32, b: f32, k: f32) -> f32 {
     return mix(b, a, h) - k * h * (1.0 - h);
 }
 
-fn scene(p: vec2f) -> f32 {
-    var d = 1e5;
+// Collects the shapes whose bounding box, grown by `reach`, contains p. A
+// shape further away than the merge radius plus a few pixels cannot change
+// the smooth minimum near the surface, so the rest are skipped.
+fn gather_near(p: vec2f, reach: f32) {
+    near_count = 0u;
     for (var i = 0u; i < u.shape_count; i++) {
         let s = u.shapes[i];
-        d = smin(d, sd_round_box(p - s.xy, s.zw, u.extra[i].x), u.merge_k);
+        let q = abs(p - s.xy) - s.zw;
+        if (max(q.x, q.y) < reach) {
+            near[near_count] = i;
+            near_count++;
+        }
     }
-    return d;
 }
 
-// Appearance blended by distance, so merged shapes share one tint smoothly.
-fn appearance_at(p: vec2f) -> f32 {
+// Distance to the glass. Shapes in the same merge group blend smoothly;
+// different groups only touch.
+fn scene(p: vec2f) -> f32 {
+    var d = 1e5;
+    var dg = 1e5;
+    var group = -1.0;
+    for (var k = 0u; k < near_count; k++) {
+        let i = near[k];
+        if (u.extra[i].z != group) {
+            d = min(d, dg);
+            dg = 1e5;
+            group = u.extra[i].z;
+        }
+        let s = u.shapes[i];
+        dg = smin(dg, sd_round_box(p - s.xy, s.zw, u.extra[i].x), u.merge_k);
+    }
+    return min(d, dg);
+}
+
+struct Style {
+    appearance: f32,
+    tint: vec3f,
+    tint_strength: f32,
+};
+
+// Appearance and tint blended by distance, so merged shapes share them smoothly.
+fn style_at(p: vec2f) -> Style {
     var a = 0.0;
     var ws = 0.0;
-    for (var i = 0u; i < u.shape_count; i++) {
+    var tint = vec3f(0.0);
+    var tw = 0.0;
+    for (var k = 0u; k < near_count; k++) {
+        let i = near[k];
         let s = u.shapes[i];
         let w = exp(-max(sd_round_box(p - s.xy, s.zw, u.extra[i].x), 0.0) / 16.0);
         a += w * u.extra[i].y;
         ws += w;
+        tint += w * u.tints[i].a * u.tints[i].rgb;
+        tw += w * u.tints[i].a;
     }
-    return a / max(ws, 1e-4);
+    let inv = 1.0 / max(ws, 1e-4);
+    return Style(a * inv, tint / max(tw, 1e-4), tw * inv);
 }
 
 fn backdrop_linear(css: vec2f, lod: f32) -> vec3f {
@@ -162,6 +208,7 @@ fn finish(c: vec3f) -> vec4f {
 fn backdrop_color(p: vec2f) -> vec3f {
     var bg = to_gamma(backdrop_linear(p, 0.0));
     if (u.shadow > 0.0) {
+        gather_near(p - vec2f(0.0, 6.0), shape_margin() + u.merge_k + 2.0);
         let ds = scene(p - vec2f(0.0, 6.0));
         var sh = exp(-max(ds, 0.0) / 14.0);
         if (ds < 0.0) {
@@ -182,9 +229,10 @@ fn fs_backdrop(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 @fragment
 fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let p = pos.xy / u.scale_factor;
-    let d = scene(p);
-
     let bg = backdrop_color(p);
+    // The gradient below samples 0.75 pt away, hence the extra point.
+    gather_near(p, u.merge_k + 4.0 / u.scale_factor + 1.0);
+    let d = scene(p);
 
     // Far outside every shape: just the backdrop.
     if (d * u.scale_factor > 3.0) {
@@ -228,7 +276,8 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // Body: a tone curve on the frosted luminance plus a chroma gain, a share
     // of the unblurred backdrop, and a lighten or darken blend of the two
     // (fitted to macOS).
-    let app = appearance_at(p);
+    let style = style_at(p);
+    let app = style.appearance;
     let body = mix(u.body_light, u.body_dark, app);
     let sharp_mix = mix(u.sharp.xy, u.sharp.zw, app);
     let to_luma = vec3f(0.2126, 0.7152, 0.0722);
@@ -243,6 +292,14 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         // Light glass takes the lighter of frost and sharp backdrop per
         // channel, dark glass the darker.
         col += blend * mix(max(frosted, s), min(frosted, s), app);
+    }
+
+    // Tinted (prominent) glass: mostly the tint color, lit a little by the
+    // frosted backdrop's luminance (fitted to macOS).
+    if (u.tint_on > 0.0 && style.tint_strength > 0.0) {
+        let t = mix(u.tint_light, u.tint_dark, app);
+        let tinted = t.x * style.tint + vec3f(t.y + t.z * luma + t.w * luma * luma);
+        col = mix(col, tinted, style.tint_strength);
     }
 
     // Highlight along the inside of the top and bottom edges, fading over

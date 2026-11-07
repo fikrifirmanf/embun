@@ -27,7 +27,7 @@ fn main() {
 
     let (w, h) = (960.0, 600.0);
     let appearance = if dark { 1.0 } else { 0.0 };
-    let shape = |center, half_size, radius| GlassShape { center, half_size, radius, appearance };
+    let shape = |center, half_size, radius| GlassShape { center, half_size, radius, appearance, ..Default::default() };
     let shapes = [
         shape([w * 0.32, h * 0.56], [96.0, 60.0], 34.0),
         shape([w - 118.0, h - 60.0], [28.0, 28.0], 28.0),

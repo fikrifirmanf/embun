@@ -40,19 +40,28 @@ fn read_scene(path: &str) -> Scene {
         match key {
             "viewport" => scene.viewport = [nums[0], nums[1]],
             "appearance" => scene.dark = words.next() == Some("dark"),
-            "shape" => scene.shapes.push(GlassShape {
-                center: [nums[0], nums[1]],
-                half_size: [nums[2], nums[3]],
-                radius: nums[4],
-                appearance: 0.0,
-            }),
+            "shape" => {
+                let prominent = line.split_whitespace().nth(6) == Some("prominent");
+                scene.shapes.push(GlassShape {
+                    center: [nums[0], nums[1]],
+                    half_size: [nums[2], nums[3]],
+                    radius: nums[4],
+                    tint: if prominent { [0.0, 0.0, 0.0, 1.0] } else { [0.0; 4] },
+                    ..Default::default()
+                })
+            }
             _ => {}
         }
     }
     assert!(scene.viewport[0] > 0.0 && !scene.shapes.is_empty(), "{path} has no viewport or shapes");
     let appearance = if scene.dark { 1.0 } else { 0.0 };
+    // System blue as the capture app's `.tint(.blue)` draws it.
+    let blue = if scene.dark { [0.0, 145.0 / 255.0, 1.0] } else { [0.0, 133.0 / 255.0, 250.0 / 255.0] };
     for s in &mut scene.shapes {
         s.appearance = appearance;
+        if s.tint[3] > 0.0 {
+            s.tint = [blue[0], blue[1], blue[2], 1.0];
+        }
     }
     scene
 }

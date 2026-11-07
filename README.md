@@ -23,7 +23,20 @@ Captures cover the three transparency settings (clear, middle, tinted), light an
 
 Each number is the average per-pixel difference, out of 255. Most of what is left sits in the one-pixel ring at the edge of each shape and over very busy backdrops such as random noise.
 
-Real glass buttons are captured too, but not yet toolbars, sidebars or menus.
+Real glass buttons are captured too. Plain glass buttons score the same as the shapes above. Prominent buttons, tinted system blue, average 2.0, 1.9 and 1.6 at clear, middle and tinted. Toolbars, sidebars and menus are not captured yet.
+
+## Speed
+
+Measured with `cargo run --release -p embun-render --example bench` on an Apple M5 at 2880×1864 pixels, with the GPU otherwise idle:
+
+| Frame | Time |
+|---|---|
+| 4 glass buttons | 0.26 ms |
+| 16 glass buttons | 0.78 ms |
+| 1 full-height sidebar | 0.57 ms |
+| 4 buttons, content behind them changing every frame | 0.87 ms |
+
+A 120 Hz display allows 8.3 ms per frame. Slower GPUs will take longer; these are not measured yet.
 
 ## Platforms
 

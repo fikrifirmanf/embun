@@ -45,12 +45,12 @@ fn main() {
         center: [120.0 + (i % 4) as f32 * 320.0, 80.0 + (i / 4) as f32 * 200.0],
         half_size: [120.0, 28.0],
         radius: 28.0,
-        appearance: 0.0,
+        ..Default::default()
     };
     let none: Vec<GlassShape> = vec![];
     let four: Vec<GlassShape> = (0..4).map(button).collect();
     let sixteen: Vec<GlassShape> = (0..16).map(button).collect();
-    let sidebar = vec![GlassShape { center: [180.0, 466.0], half_size: [170.0, 456.0], radius: 20.0, appearance: 0.0 }];
+    let sidebar = vec![GlassShape { center: [180.0, 466.0], half_size: [170.0, 456.0], radius: 20.0, ..Default::default() }];
     let frost_off = GlassLayers { frost: false, ..GlassLayers::default() };
     let cases: [(&str, &[GlassShape], GlassLayers, bool); 7] = [
         ("backdrop only, no glass", &none, frost_off, false),
@@ -80,7 +80,7 @@ fn main() {
                 for _ in 0..frames {
                     let mut encoder = device.create_command_encoder(&Default::default());
                     if *content_changes {
-                        renderer.regenerate_mips(&device, &mut encoder, &backdrop);
+                        renderer.regenerate_mips(&mut encoder, &backdrop);
                     }
                     renderer.render(&queue, &mut encoder, &view, &backdrop, &frame);
                     in_flight.push_back(queue.submit([encoder.finish()]));

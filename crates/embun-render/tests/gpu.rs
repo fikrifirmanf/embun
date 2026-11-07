@@ -43,7 +43,7 @@ fn render_image(gpu: &Gpu, image: &backdrops::Image, shapes: &[GlassShape], para
 }
 
 fn circle(x: f32, y: f32, r: f32, appearance: f32) -> GlassShape {
-    GlassShape { center: [x, y], half_size: [r, r], radius: r, appearance }
+    GlassShape { center: [x, y], half_size: [r, r], radius: r, appearance, ..Default::default() }
 }
 
 fn assert_near(actual: [u8; 3], expected: [u8; 3], tolerance: u8) {
@@ -101,7 +101,7 @@ fn glass_over_flat_backdrops_matches_macos_captures() {
 fn outline_darkens_the_pixel_just_outside_like_macos() {
     let gpu = gpu();
     // A rectangle with edges on pixel boundaries: left edge x = 60, top edge y = 30.
-    let shapes = [GlassShape { center: [100.0, 50.0], half_size: [40.0, 20.0], radius: 10.0, appearance: 0.0 }];
+    let shapes = [GlassShape { center: [100.0, 50.0], half_size: [40.0, 20.0], radius: 10.0, appearance: 0.0, ..Default::default() }];
     let focused = render(&gpu, [242, 242, 247], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
     // macOS clear, light, focused: 176 beside the left edge, 223 above the top edge.
     assert!(focused(59, 50)[1].abs_diff(176) <= 5, "left outline was {:?}", focused(59, 50));
@@ -116,7 +116,7 @@ fn outline_darkens_the_pixel_just_outside_like_macos() {
 #[test]
 fn focused_glass_brightens_the_inside_of_its_top_edge_like_macos() {
     let gpu = gpu();
-    let shapes = [GlassShape { center: [100.0, 50.0], half_size: [40.0, 20.0], radius: 10.0, appearance: 1.0 }];
+    let shapes = [GlassShape { center: [100.0, 50.0], half_size: [40.0, 20.0], radius: 10.0, appearance: 1.0, ..Default::default() }];
     let px = render(&gpu, [28, 28, 30], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
     // macOS clear, dark, focused: 108 in the first pixel inside the top edge,
     // 87 in the second, against 59 inside; nothing extra inside the left edge.
@@ -144,7 +144,7 @@ fn clear_glass_keeps_detail_on_its_own_side_of_the_frost_like_macos() {
     }
     let level = 0.0;
     for (appearance, name) in [(0.0, "light"), (1.0, "dark")] {
-        let shape = [GlassShape { center: [100.0, 50.0], half_size: [90.0, 45.0], radius: 20.0, appearance }];
+        let shape = [GlassShape { center: [100.0, 50.0], half_size: [90.0, 45.0], radius: 20.0, appearance, ..Default::default() }];
         let params = GlassParams::from_level(level, GlassLayers::default(), false);
         let over_stripes = render_image(&gpu, &stripes, &shape, params);
         let over_mean = render(&gpu, [mean as u8; 3], &shape, params);
@@ -193,7 +193,7 @@ fn frost_follows_new_backdrop_content_after_regenerate_mips() {
         wgpu::Extent3d { width: 200, height: 100, depth_or_array_layers: 1 },
     );
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    gpu.renderer.regenerate_mips(&gpu.device, &mut encoder, &backdrop);
+    gpu.renderer.regenerate_mips(&mut encoder, &backdrop);
     gpu.queue.submit([encoder.finish()]);
 
     // Same glass over a fresh backdrop of the new color.
@@ -270,4 +270,150 @@ fn non_srgb_targets_like_browser_canvases_get_the_same_colors() {
     let worst = srgb.iter().zip(&unorm).map(|(a, b)| a.abs_diff(*b)).max().unwrap();
     // Both paths use the exact sRGB curve; only rounding differs.
     assert!(worst <= 2, "largest channel difference was {worst}");
+}
+
+// unslop-ignore TEST_WITHOUT_ASSERTION -- asserts through the assert_near helper
+#[test]
+fn prominent_glass_matches_macos_and_loses_its_color_without_focus() {
+    // Center pixels of the extra-large `.glassProminent` button in
+    // reference/macos-27.0.1/{clear,tinted}/controls-solid-*-glass.png. The
+    // capture app tints with system blue, which is lighter in dark mode.
+    let (light, dark) = ([242, 242, 247], [28, 28, 30]);
+    let (blue, dark_blue) = ([0.0, 133.0 / 255.0, 250.0 / 255.0], [0.0, 145.0 / 255.0, 1.0]);
+    let cases = [
+        (0.0, 0.0, light, blue, [0, 133, 251]),
+        (1.0, 0.0, light, blue, [0, 135, 253]),
+        (0.0, 1.0, dark, dark_blue, [4, 146, 254]),
+        (1.0, 1.0, dark, dark_blue, [1, 145, 255]),
+    ];
+    let gpu = gpu();
+    for (level, appearance, backdrop, tint, macos) in cases {
+        let shapes = [circle(100.0, 50.0, 40.0, appearance).tint(tint, 1.0)];
+        let center = render(&gpu, backdrop, &shapes, GlassParams::from_level(level, GlassLayers::default(), false))(100, 50);
+        // The tint model is one least-squares fit over photo, checker, noise
+        // and flat backdrops; its RMS error is up to 5 out of 255 (dark, clear).
+        assert_near(center, macos, 5);
+    }
+    // A window without focus draws the same button as plain glass.
+    let unfocused = GlassParams::unfocused(0.5, GlassLayers::default(), false);
+    let tinted = render(&gpu, light, &[circle(100.0, 50.0, 40.0, 0.0).tint(blue, 1.0)], unfocused)(100, 50);
+    let plain = render(&gpu, light, &[circle(100.0, 50.0, 40.0, 0.0)], unfocused)(100, 50);
+    assert_eq!(tinted, plain);
+}
+
+#[test]
+fn shapes_in_different_merge_groups_do_not_merge() {
+    let gpu = gpu();
+    // Two circles with a 6 px gap, centered on (123, 50), as in the merge test.
+    let params = GlassParams::from_level(1.0, GlassLayers::default(), false);
+    let grouped = [circle(100.0, 50.0, 20.0, 0.0), circle(146.0, 50.0, 20.0, 0.0)];
+    let apart = [circle(100.0, 50.0, 20.0, 0.0), circle(146.0, 50.0, 20.0, 0.0).group(1)];
+    let merged = render(&gpu, [20, 20, 20], &grouped, params);
+    let separate = render(&gpu, [20, 20, 20], &apart, params);
+    assert!(merged(123, 50)[1] > 150, "same group should fill the gap, got {:?}", merged(123, 50));
+    assert_near(separate(123, 50), [20, 20, 20], 1);
+    // Both shapes are still drawn in full.
+    assert_near(separate(100, 50), merged(100, 50), 1);
+    assert_near(separate(146, 50), merged(146, 50), 1);
+}
+
+#[test]
+fn frames_over_two_backdrops_can_share_one_encoder() {
+    let gpu = gpu();
+    let make = |color| {
+        let image = backdrops::solid(200, 100, color);
+        gpu.renderer.create_backdrop(&gpu.device, &gpu.queue, &image.rgba, image.width, image.height)
+    };
+    let (dark_backdrop, light_backdrop) = (make([20, 20, 20]), make([230, 230, 230]));
+    let dark_shapes = [circle(100.0, 50.0, 40.0, 1.0)];
+    let light_shapes = [circle(100.0, 50.0, 40.0, 0.0)];
+    let frame = |shapes, level| Frame {
+        viewport: VIEW,
+        scale_factor: 1.0,
+        backdrop_scale: 1.0,
+        scroll: 0.0,
+        shapes,
+        params: GlassParams::from_level(level, GlassLayers::default(), false),
+    };
+    let frames = [(&dark_backdrop, frame(&dark_shapes, 0.0)), (&light_backdrop, frame(&light_shapes, 1.0))];
+
+    // Each frame on its own.
+    let alone: Vec<[u8; 3]> = frames
+        .iter()
+        .map(|(backdrop, frame)| {
+            let (pixels, width, _) = offscreen::render_rgba(&gpu.device, &gpu.queue, &gpu.renderer, backdrop, frame);
+            let i = ((50 * width + 100) * 4) as usize;
+            [pixels[i], pixels[i + 1], pixels[i + 2]]
+        })
+        .collect();
+
+    // Both recorded into one encoder before a single submit.
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    let readbacks: Vec<wgpu::Buffer> = frames
+        .iter()
+        .map(|(backdrop, frame)| {
+            let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d { width: 200, height: 100, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: offscreen::FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            gpu.renderer.render(&gpu.queue, &mut encoder, &target.create_view(&Default::default()), backdrop, frame);
+            let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: 1024 * 100,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            encoder.copy_texture_to_buffer(
+                target.as_image_copy(),
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &buffer,
+                    layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(1024), rows_per_image: Some(100) },
+                },
+                wgpu::Extent3d { width: 200, height: 100, depth_or_array_layers: 1 },
+            );
+            buffer
+        })
+        .collect();
+    gpu.queue.submit([encoder.finish()]);
+    for (buffer, expected) in readbacks.iter().zip(&alone) {
+        buffer.slice(..).map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+        gpu.device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+        let data = buffer.slice(..).get_mapped_range().expect("mapped");
+        let i = 50 * 1024 + 100 * 4;
+        assert_eq!([data[i], data[i + 1], data[i + 2]], *expected);
+    }
+    assert_ne!(alone[0], alone[1], "the two frames should differ, or this test proves nothing");
+}
+
+#[test]
+fn shapes_with_nan_or_infinite_values_are_skipped() {
+    let gpu = gpu();
+    let params = GlassParams::from_level(1.0, GlassLayers::default(), false);
+    let good = circle(60.0, 50.0, 20.0, 0.0);
+    let alone = render(&gpu, [20, 20, 20], &[good], params);
+    let bad = [circle(f32::NAN, 50.0, 20.0, 0.0), GlassShape { radius: f32::INFINITY, ..circle(140.0, 50.0, 20.0, 0.0) }];
+    let mixed = render(&gpu, [20, 20, 20], &[bad[0], good, bad[1]], params);
+    for (x, y) in [(60, 50), (140, 50), (100, 50), (5, 5)] {
+        assert_eq!(mixed(x, y), alone(x, y), "pixel ({x}, {y})");
+    }
+}
+
+#[test]
+fn up_to_max_shapes_are_drawn_and_the_rest_ignored() {
+    use embun_render::MAX_SHAPES;
+    let gpu = gpu();
+    let params = GlassParams::from_level(1.0, GlassLayers { merge: false, ..GlassLayers::default() }, false);
+    // A 13 x 5 grid of 6 px circles, one more than the limit.
+    let shapes: Vec<GlassShape> =
+        (0..MAX_SHAPES + 1).map(|i| circle(10.0 + (i % 13) as f32 * 15.0, 10.0 + (i / 13) as f32 * 20.0, 6.0, 0.0)).collect();
+    let px = render(&gpu, [20, 20, 20], &shapes, params);
+    let at = |i: usize| px(10 + (i % 13) as u32 * 15, 10 + (i / 13) as u32 * 20);
+    assert!(at(MAX_SHAPES - 1)[1] > 150, "shape {} should be glass, got {:?}", MAX_SHAPES - 1, at(MAX_SHAPES - 1));
+    assert_near(at(MAX_SHAPES), [20, 20, 20], 1);
 }

@@ -43,6 +43,20 @@ pub struct Body {
     pub blend: f32,
 }
 
+/// How tinted (prominent) glass is drawn, per channel on gamma-encoded values:
+///
+/// `amount * t + offset + gain * L + curve * L²`
+///
+/// where `t` is the shape's tint color and `L` the luminance of the frosted
+/// backdrop. A shape's tint strength mixes from the plain glass to this.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tint {
+    pub amount: f32,
+    pub offset: f32,
+    pub gain: f32,
+    pub curve: f32,
+}
+
 /// Shader inputs derived from a single glass level.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GlassParams {
@@ -74,6 +88,9 @@ pub struct GlassParams {
     /// dark glass, at its peak (gamma-encoded, 0 to 1). It fades over about
     /// two device pixels.
     pub highlight: [f32; 2],
+    /// Tinted glass for light and dark appearance, or `None` to draw tinted
+    /// shapes as plain glass, as macOS does in a window without focus.
+    pub tint: Option<[Tint; 2]>,
 }
 
 /// Merge radius in logical pixels. Fitted to the neck macOS draws between two
@@ -108,6 +125,16 @@ const FOCUSED: [[f32; COLUMNS]; 3] = [
     ],
 ];
 
+/// Tinted glass in focused windows: amount, offset, gain, curve for light,
+/// then dark. Fitted to `.glassProminent` buttons tinted system blue, inside
+/// 4 pt of the edge: RMS error 4.7, 3.5 and 2.2 out of 255 (light) and 5.0,
+/// 4.7 and 2.4 (dark) at clear, middle and tinted.
+const TINTED: [[f32; 8]; 3] = [
+    [0.972, -0.146, 0.261, -0.096, 0.943, 0.030, 0.049, 0.007],
+    [0.980, -0.102, 0.169, -0.051, 0.942, 0.029, 0.064, -0.013],
+    [0.992, -0.056, 0.082, -0.014, 0.975, 0.011, 0.041, -0.017],
+];
+
 /// Unfocused windows, measured the same way from captures of a window
 /// without focus. Frosted only, no sharp backdrop and no highlight; the
 /// outline at the ends is two thirds of the sides.
@@ -135,21 +162,25 @@ impl GlassParams {
     /// `reduce_transparency` overrides the level with a nearly opaque surface
     /// (not yet measured).
     pub fn from_level(level: f32, layers: GlassLayers, reduce_transparency: bool) -> Self {
-        Self::from_table(&FOCUSED, level, layers, reduce_transparency)
+        let mut p = Self::from_table(&FOCUSED, level, layers, reduce_transparency);
+        p.tint = Some(if reduce_transparency {
+            [Tint { amount: 1.0, offset: 0.0, gain: 0.0, curve: 0.0 }; 2]
+        } else {
+            let t = interpolate(&TINTED, level);
+            let tint = |i: usize| Tint { amount: t[i], offset: t[i + 1], gain: t[i + 2], curve: t[i + 3] };
+            [tint(0), tint(4)]
+        });
+        p
     }
 
     /// The same for a window without focus, where macOS glass is frosted
-    /// more and shows no sharp backdrop.
+    /// more, shows no sharp backdrop, and draws tinted shapes untinted.
     pub fn unfocused(level: f32, layers: GlassLayers, reduce_transparency: bool) -> Self {
         Self::from_table(&UNFOCUSED, level, layers, reduce_transparency)
     }
 
     fn from_table(table: &[[f32; COLUMNS]; 3], level: f32, layers: GlassLayers, reduce: bool) -> Self {
-        let l = if level.is_finite() { level.clamp(0.0, 1.0) } else { DEFAULT_LEVEL };
-        let m: [f32; COLUMNS] = {
-            let (a, b, t) = if l <= 0.5 { (0, 1, l * 2.0) } else { (1, 2, l * 2.0 - 1.0) };
-            std::array::from_fn(|i| lerp(table[a][i], table[b][i], t))
-        };
+        let m = interpolate(table, level);
         let (light, dark) = if reduce {
             let opaque = |offset| Body {
                 offset,
@@ -190,8 +221,17 @@ impl GlassParams {
             outline: [m[15], m[16]],
             outline_ends: [m[17], m[18]],
             highlight: [m[19], m[20]],
+            tint: None,
         }
     }
+}
+
+/// The row for `level`, interpolated between the captured positions 0, 0.5
+/// and 1. Out-of-range levels clamp; NaN falls back to the default.
+fn interpolate<const N: usize>(table: &[[f32; N]; 3], level: f32) -> [f32; N] {
+    let l = if level.is_finite() { level.clamp(0.0, 1.0) } else { DEFAULT_LEVEL };
+    let (a, b, t) = if l <= 0.5 { (0, 1, l * 2.0) } else { (1, 2, l * 2.0 - 1.0) };
+    std::array::from_fn(|i| lerp(table[a][i], table[b][i], t))
 }
 
 impl Default for GlassParams {
@@ -255,6 +295,20 @@ mod tests {
         }
         let unfocused = GlassParams::unfocused(0.0, GlassLayers::default(), false);
         assert_eq!((unfocused.light.sharp_gain, unfocused.light.blend), (0.0, 0.0));
+    }
+
+    #[test]
+    fn tint_is_measured_when_focused_and_off_without_focus() {
+        for (level, row) in [0.0, 0.5, 1.0].into_iter().zip(&TINTED) {
+            let [light, dark] = GlassParams::from_level(level, GlassLayers::default(), false).tint.unwrap();
+            assert_eq!([light.amount, light.offset, light.gain, light.curve], row[..4]);
+            assert_eq!([dark.amount, dark.offset, dark.gain, dark.curve], row[4..]);
+        }
+        // Prominent buttons lose their color in a window without focus.
+        assert_eq!(GlassParams::unfocused(0.5, GlassLayers::default(), false).tint, None);
+        // Reduce Transparency draws the tint color solid.
+        let [light, _] = GlassParams::from_level(0.5, GlassLayers::default(), true).tint.unwrap();
+        assert_eq!((light.amount, light.gain), (1.0, 0.0));
     }
 
     #[test]
