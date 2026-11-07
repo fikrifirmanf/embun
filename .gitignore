@@ -1,0 +1,7 @@
+/target
+# Diff sheets written by the compare example; regenerate with tools/capture/compare-all.sh.
+/reference/**/*-compare.png
+# wasm build of embun-web for the demo page. Rebuild with:
+#   cargo build --release -p embun-web --target wasm32-unknown-unknown
+#   wasm-bindgen --target web --no-typescript --out-dir demo/embun target/wasm32-unknown-unknown/release/embun_web.wasm
+/demo/embun/

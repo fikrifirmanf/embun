@@ -1,0 +1,14 @@
+[package]
+name = "embun-render"
+description = "Frosted, lensed, merging glass shapes rendered with wgpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wgpu.workspace = true
+bytemuck.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+png.workspace = true

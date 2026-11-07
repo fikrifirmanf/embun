@@ -1,0 +1,10 @@
+[package]
+name = "embun"
+description = "A Rust UI toolkit with frosted, merging glass"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+embun-render.workspace = true
+embun-motion.workspace = true

@@ -1,0 +1,860 @@
+<title>Embun</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one 1120px column; demo row (stage + control panel) up top, plan below in a 70ch reading column with full-width tables */
+:root {
+  --bg: #f2f3f6;
+  --surface: #ffffff;
+  --fg: #16181d;
+  --muted: #4c5361;
+  --line: #d6d9e0;
+  --accent: #a8400e;
+  --accent-soft: #f6e6dc;
+  --code-bg: #eaecf1;
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --radius-window: 22px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1014; --surface: #171a20; --fg: #e7e9ee; --muted: #a4abb8; --line: #2b303a;
+    --accent: #f08c55; --accent-soft: #3a2216; --code-bg: #1c2028; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1014; --surface: #171a20; --fg: #e7e9ee; --muted: #a4abb8; --line: #2b303a;
+  --accent: #f08c55; --accent-soft: #3a2216; --code-bg: #1c2028; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.6; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 4.4vw, 3rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.15rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible + span, input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 14px; max-width: 70ch; }
+.lede { font-size: 1.125rem; color: var(--muted); }
+
+/* Demo */
+.demo { display: grid; gap: 16px; }
+.demo-head { display: grid; gap: 6px; max-width: 70ch; }
+.demo-head p { color: var(--muted); }
+.demo-row { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.stage { position: relative; aspect-ratio: 16 / 10; max-width: 100%; border-radius: var(--radius-window); overflow: hidden; border: 1px solid var(--line); background: #000; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
+.stage canvas.grab { cursor: grab; }
+.stage canvas.grabbing { cursor: grabbing; }
+.overlay { position: absolute; inset: 0; pointer-events: none; }
+.chip { position: absolute; left: 0; top: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-weight: 600; font-size: 15px; color: #1d1d1f; }
+.chip.toolbar { justify-content: space-between; padding: 0 16px; }
+.chip .grp { display: flex; gap: 16px; align-items: center; }
+.chip svg { width: 18px; height: 18px; display: block; }
+.nogl { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #e7e9ee; background: #16181d; }
+.stage-note { font-size: 0.875rem; color: var(--muted); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 18px; }
+.panel fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.panel legend { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 0; margin-bottom: 8px; }
+.range-row { display: grid; gap: 4px; }
+.range-row input { width: 100%; accent-color: var(--accent); }
+.range-ends { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); }
+.range-ends output { font-family: var(--font-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 3px; }
+.seg label { flex: 1; position: relative; }
+.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg span { display: block; text-align: center; font-size: 0.85rem; font-weight: 500; padding: 5px 4px; border-radius: 6px; color: var(--muted); transition: background-color 150ms, color 150ms; }
+.seg input:checked + span { background: var(--fg); color: var(--bg); }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.checks label, .solo { display: flex; gap: 8px; align-items: center; font-size: 0.9rem; cursor: pointer; }
+.checks input, .solo input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: 500 0.875rem var(--font-body); padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; transition: background-color 150ms; }
+.btn:hover { background: var(--code-bg); }
+
+/* Plan */
+.plan { display: grid; gap: 56px; }
+.sec { display: grid; gap: 16px; }
+.sec > p, .sec > ul, .sec > ol { max-width: 70ch; }
+.sec ul, .sec ol { margin: 0; padding-left: 1.25rem; display: grid; gap: 6px; }
+.answer { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 16px 20px; border-radius: 0 10px 10px 0; display: grid; gap: 10px; max-width: 78ch; }
+.answer strong { font-weight: 600; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.925rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+.decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.decision { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+.decision p { color: var(--muted); font-size: 0.925rem; }
+.phases { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.phase { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.phase-meta { display: grid; gap: 4px; align-content: start; }
+.phase-num { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); font-weight: 500; }
+.phase-time { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
+.phase-body { display: grid; gap: 10px; max-width: 72ch; }
+.phase-body ul { margin: 0; padding-left: 1.25rem; display: grid; gap: 4px; }
+.done { font-size: 0.925rem; }
+.done b { font-weight: 600; }
+pre { margin: 0; overflow-x: auto; background: var(--code-bg); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.55; }
+pre code { background: none; padding: 0; font-size: inherit; }
+.sources { font-size: 0.9rem; color: var(--muted); }
+.sources ul { padding-left: 1.25rem; margin: 6px 0 0; display: grid; gap: 4px; }
+
+@media (max-width: 860px) {
+  .demo-row { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .stage { aspect-ratio: 4 / 5; }
+  .phase { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .phase-meta { display: flex; gap: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .seg span, .btn { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Embun · Plan and prototype · 7 Nov 2026 · Target: macOS 27.0.1</p>
+    <h1>Embun, a glass UI toolkit for Rust</h1>
+    <p class="lede"><i>Embun</i> is Indonesian for dew: liquid drops resting on glass. This is the plan for a cross-platform Rust UI toolkit whose glass matches macOS 27 as closely as we can measure, with the first working renderer below.</p>
+  </header>
+
+  <section class="demo" aria-labelledby="demo-title">
+    <div class="demo-head">
+      <h2 id="demo-title">Prototype</h2>
+      <p>This is <code>embun-render</code>, the Phase 1 renderer, compiled from Rust and running in your browser. Drag any glass shape. Push the two round buttons together to see them merge.</p>
+    </div>
+    <div class="demo-row">
+      <div>
+        <div class="stage" id="stage">
+          <canvas id="glass" role="img" aria-label="Live glass rendering: a toolbar, a lens and two round buttons over scrolling content"></canvas>
+          <div class="overlay" id="overlay" aria-hidden="true"></div>
+          <div class="nogl" id="nogl" hidden>Your browser has WebGL2 turned off, so the prototype can't run here. The plan below still applies.</div>
+        </div>
+      </div>
+      <form class="panel" id="controls" aria-label="Glass settings">
+        <fieldset>
+          <legend>Glass level</legend>
+          <div class="range-row">
+            <input type="range" id="level" min="0" max="100" value="50" aria-describedby="level-ends">
+            <div class="range-ends" id="level-ends"><span>Ultra clear</span><output id="level-out" for="level">0.50</output><span>Tinted</span></div>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Appearance</legend>
+          <div class="seg">
+            <label><input type="radio" name="appearance" id="app-light" value="light" checked><span>Light</span></label>
+            <label><input type="radio" name="appearance" id="app-dark" value="dark"><span>Dark</span></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Content behind the glass</legend>
+          <div class="seg">
+            <label><input type="radio" name="backdrop" id="bd-photos" value="photos" checked><span>Photos</span></label>
+            <label><input type="radio" name="backdrop" id="bd-article" value="article"><span>Text</span></label>
+            <label><input type="radio" name="backdrop" id="bd-checker" value="checker"><span>Grid</span></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Shader layers</legend>
+          <div class="checks">
+            <label><input type="checkbox" id="f-blur" checked>Frost</label>
+            <label><input type="checkbox" id="f-refract" checked>Lensing</label>
+            <label><input type="checkbox" id="f-rim">Rim light</label>
+            <label><input type="checkbox" id="f-fringe" checked>Color fringe</label>
+            <label><input type="checkbox" id="f-shadow">Shadow</label>
+            <label><input type="checkbox" id="f-merge" checked>Merging</label>
+            <label><input type="checkbox" id="f-adaptive" checked>Adaptive tint</label>
+          </div>
+        </fieldset>
+        <label class="solo"><input type="checkbox" id="f-reduce">Reduce transparency</label>
+        <div class="btns">
+          <button type="button" class="btn" id="toggle-scroll">Pause scrolling</button>
+          <button type="button" class="btn" id="reset">Reset shapes</button>
+        </div>
+      </form>
+    </div>
+    <p class="stage-note"><span id="engine">Loading the renderer…</span> The Rust renderer is fitted to 18 macOS 27.0.1 captures. Rim light and shadow are extras: macOS draws neither on resting controls.</p>
+  </section>
+
+  <div class="plan">
+    <section class="sec" aria-labelledby="s-answer">
+      <h2 id="s-answer">Can it match macOS 27 exactly?</h2>
+      <div class="answer">
+        <p><strong>Not pixel for pixel, but close enough that most people can't tell side by side.</strong> Apple's shaders and their settings are private, so we rebuild the look from measurements instead of porting code.</p>
+        <p>The system draws Apple's glass, so it can see the wallpaper and other windows. Ours can only bend what our own app draws. Apple also keeps adjusting the look between point releases, so we freeze one version as the reference: macOS 27.0.1, the version on this Mac.</p>
+      </div>
+    </section>
+
+    <section class="sec" aria-labelledby="s-status">
+      <h2 id="s-status">Where it stands</h2>
+      <ul>
+        <li>The workspace lives at <code>~/Development/embun</code> with <code>embun-render</code>, <code>embun-motion</code>, <code>embun</code> and <code>embun-web</code>.</li>
+        <li><code>embun-render</code> draws frost, lensing, the macOS outline and merging, with rim light and shadow as optional extras. It renders natively on Metal and in the browser through WebAssembly.</li>
+        <li>Phase 0 is done for basic shapes. A capture app put real macOS 27.0.1 glass over our test backdrops at three slider positions, in light and dark: 18 pairs of screenshots. The shader is fitted to them. Average error went from 8–35 to 0.3–2.7 out of 255 per capture.</li>
+        <li><code>embun-motion</code> has springs with SwiftUI-style response and damping settings.</li>
+        <li>16 tests pass. Six render real frames on the GPU, and one checks glass colors against pixels read from the macOS captures.</li>
+        <li>Next: Apple's continuous corners, a smoother blur, and captures of real controls (toolbar, sidebar, menus) beyond plain shapes.</li>
+      </ul>
+    </section>
+
+    <section class="sec" aria-labelledby="s-27">
+      <h2 id="s-27">What macOS 27 changed, and what we build for it</h2>
+      <p>macOS 27 kept Liquid Glass but toned it down after complaints about 26. Each change below becomes a parameter or component in the library.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>macOS 27 change</th><th>What the library does</th></tr></thead>
+          <tbody>
+            <tr><td>A glass slider in System Settings › Appearance, from ultra clear to fully tinted. The default sits in the middle.</td><td>One <code>glass_level: f32</code> from 0.0 to 1.0, default 0.5. It drives frost, tint, saturation and lensing together, the way the prototype's slider does.</td></tr>
+            <tr><td>Less transparent by default than macOS 26.</td><td>Calibrate the 0.5 point against 27 screenshots only. Throw away any 26 references.</td></tr>
+            <tr><td>A uniform frosted toolbar. A continuous bar appears when content scrolls under the controls.</td><td>A <code>ScrollEdge</code> effect: the toolbar gains a frosted band once content passes beneath it.</td></tr>
+            <tr><td>Every window uses the same corner radius, third-party apps included.</td><td>One <code>window_radius</code> token, measured from screenshots.</td></tr>
+            <tr><td>Sidebars reach the window edge again.</td><td>The sidebar is a glass panel flush with the window edge, not a floating card.</td></tr>
+            <tr><td>Colored sidebar icons, only in the active app.</td><td>Window focus state feeds icon tint: color when active, monochrome when inactive.</td></tr>
+            <tr><td>Darker edges and brighter highlights on icons.</td><td>Separate rim highlight and edge darkening parameters, checked against screenshots.</td></tr>
+            <tr><td>Reduce Transparency still lives in Accessibility › Display.</td><td>The opaque quality tier, switched on from the OS setting on every platform.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sec" aria-labelledby="s-dec">
+      <h2 id="s-dec">Decisions</h2>
+      <div class="decisions">
+        <div class="decision"><h3>Library first, framework later</h3><p>Ship <code>embun-render</code> as a library that iced, egui and Bevy apps can use. The <code>embun</code> framework comes later, built on top of it.</p></div>
+        <div class="decision"><h3>Tailwind-style styling</h3><p>Chained methods like <code>.px_4().rounded_full().glass()</code> are the core API. A <code>tw!</code> macro accepts class strings and checks them at compile time.</p></div>
+        <div class="decision"><h3>Freeze macOS 27.0.1</h3><p>All reference screenshots come from one version. When 27.1 ships, we decide whether to follow it.</p></div>
+        <div class="decision"><h3>Desktop, then web, then mobile</h3><p>macOS, Windows and Linux first. Web and mobile have the tightest GPU budgets, so they wait until the effect is stable.</p></div>
+        <div class="decision"><h3>Declarative, retained API</h3><p>Closer to SwiftUI than to egui. Merging shapes need to know which element became which between frames.</p></div>
+        <div class="decision"><h3>Named Embun</h3><p>"Liquid Glass" is Apple's trademark, so the toolkit has its own name. SF Pro and SF Symbols are licensed for Apple platforms only, so Embun ships open fonts and icons.</p></div>
+      </div>
+    </section>
+
+    <section class="sec" aria-labelledby="s-crates">
+      <h2 id="s-crates">Workspace layout</h2>
+      <p>One Cargo workspace, three crates. The two libraries work on their own, and the framework is optional on top of them.</p>
+<pre><code>embun-render   library    shapes, frost, lensing, quality tiers (depends only on wgpu)
+embun-motion   library    springs and merge transitions (no rendering)
+embun          framework  winit + taffy + parley + accesskit, built on the two above</code></pre>
+      <p><code>embun-render</code> also compiles to WebAssembly. The prototype on this page gets replaced by the real Rust renderer once Phase 1 is done.</p>
+    </section>
+
+    <section class="sec" aria-labelledby="s-style">
+      <h2 id="s-style">Styling API</h2>
+      <p>Styling works like Tailwind. Layout already follows CSS rules because <code>taffy</code> implements flexbox and grid, so <code>gap</code>, <code>padding</code> and <code>justify-content</code> mean what web developers expect.</p>
+      <h3>Chained methods (the core API)</h3>
+<pre><code>div()
+    .flex().items_center().justify_between()
+    .h_13().px_4().gap_4()
+    .rounded_full()
+    .glass()                  // level 0.5, the macOS 27 default
+    .glass_adaptive()         // tint and text color follow the content underneath
+    .hover(|s| s.glass_level(0.6))
+    .child(icon_button(Icon::Search))</code></pre>
+      <h3>Class strings, checked at compile time</h3>
+<pre><code>div().class(tw!("flex items-center gap-4 px-4 rounded-full glass glass-adaptive hover:glass-60"))</code></pre>
+      <p>The <code>tw!</code> macro turns the string into the same method calls while compiling, so a typo is a compile error. Both styles can be mixed.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Glass utility</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>glass</code></td><td>Glass at level 0.5, the macOS 27 default</td></tr>
+            <tr><td><code>glass-clear</code>, <code>glass-tinted</code></td><td>The two ends of the macOS slider</td></tr>
+            <tr><td><code>glass-20</code> to <code>glass-90</code></td><td>A specific level</td></tr>
+            <tr><td><code>glass-adaptive</code></td><td>Tint and text color follow the content underneath</td></tr>
+            <tr><td><code>glass-group</code></td><td>Children merge when they come close</td></tr>
+            <tr><td><code>glass-none</code></td><td>No glass</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Variants follow Tailwind: <code>hover:</code>, <code>active:</code>, <code>focus:</code>, <code>dark:</code>. Two are new: <code>reduce-transparency:</code> and <code>inactive:</code>, for when the window isn't focused. Spacing, radius, colors and glass levels come from a theme, the way <code>tailwind.config</code> works:</p>
+<pre><code>Theme::default()
+    .spacing_unit(px(4))          // px_4 = 16px
+    .radius("window", px(22))     // replaced by the Phase 0 measurement
+    .glass_default(0.5)</code></pre>
+    </section>
+
+    <section class="sec" aria-labelledby="s-comp">
+      <h2 id="s-comp">Components</h2>
+      <p>Apple's rule: glass is for the controls and navigation layer, never for content. Toolbars, sidebars, buttons and menus get glass. Lists, text and images don't. Groups are built in order, and each one makes a bigger kind of app possible.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Group</th><th>Component</th><th>Glass</th><th>What has to match macOS 27</th></tr></thead>
+          <tbody>
+            <tr><td>0 · Primitives</td><td><code>div</code>, stacks</td><td>Optional</td><td>The layout box with the styling API</td></tr>
+            <tr><td></td><td><code>text</code></td><td>No</td><td>Color adapts when it sits on glass</td></tr>
+            <tr><td></td><td><code>icon</code></td><td>No</td><td>Lucide or Phosphor, since SF Symbols can't ship</td></tr>
+            <tr><td></td><td><code>image</code>, <code>scroll</code></td><td>No</td><td>Scroll position feeds the toolbar's scroll edge effect</td></tr>
+            <tr><td></td><td><code>glass_group</code></td><td>Yes</td><td>Merging, our version of <code>GlassEffectContainer</code></td></tr>
+            <tr><td>1 · Controls</td><td>Button</td><td>Yes</td><td>Icon, text and accent-tinted styles; press response</td></tr>
+            <tr><td></td><td>Toolbar</td><td>Yes</td><td>Frosted, with a continuous bar once content scrolls under it</td></tr>
+            <tr><td></td><td>Segmented control</td><td>Yes</td><td>Selection slides between segments</td></tr>
+            <tr><td></td><td>Toggle, slider</td><td>Knob</td><td>Spring motion. Phase 0 checks whether the knob turns to glass while dragged, as on iOS</td></tr>
+            <tr><td>2 · App shell</td><td>Window frame</td><td>No</td><td>Native title bar on macOS; drawn by us on Windows and Linux</td></tr>
+            <tr><td></td><td>Sidebar</td><td>Yes</td><td>Flush with the window edge; colored icons only when the window is focused</td></tr>
+            <tr><td></td><td>Split view</td><td>No</td><td>Sidebar, content and inspector columns</td></tr>
+            <tr><td></td><td>Tab bar, search field</td><td>Yes</td><td>Search often sits inside the toolbar</td></tr>
+            <tr><td>3 · Overlays</td><td>Menu, context menu</td><td>Yes</td><td>Grows out of the button that opened it</td></tr>
+            <tr><td></td><td>Popover, sheet, alert</td><td>Yes</td><td>Sheets attach to the window</td></tr>
+            <tr><td></td><td>Tooltip</td><td>No</td><td></td></tr>
+            <tr><td>4 · Content</td><td>Text field, list, table, checkbox, radio, picker, stepper, progress, spinner</td><td>No</td><td>Standard macOS look; built last because they don't involve glass</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A component is done when it passes its Phase 0 screenshot comparison in light, dark and three glass levels; every state is drawn (hover, pressed, focused, disabled, window not focused); it works with the keyboard and a screen reader; and it has a page in the demo. Groups 0 and 1 together are enough to rebuild this page's prototype with real components.</p>
+    </section>
+
+    <section class="sec" aria-labelledby="s-phases">
+      <h2 id="s-phases">Phases</h2>
+      <p>Time estimates assume one developer working full time. Each phase has a check that says it's finished.</p>
+      <div class="phases">
+        <div class="phase">
+          <div class="phase-meta"><span class="phase-num">Phase 0</span><span class="phase-time">~1 week</span></div>
+          <div class="phase-body">
+            <h3>Capture the reference</h3>
+            <ul>
+              <li>On macOS 27.0.1, screenshot the toolbar, buttons, sidebar, menus and sheets over three backgrounds: photos, dense text and a test grid.</li>
+              <li>Take each at three slider positions (ultra clear, middle, tinted) in light and dark. That's 18 shots per control.</li>
+              <li>Build a comparison tool that shows our render next to the screenshot, with a pixel diff and an SSIM score.</li>
+            </ul>
+            <p class="done"><b>Done when</b> any render can be scored against the matching screenshot with one command.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <div class="phase-meta"><span class="phase-num">Phase 1</span><span class="phase-time">2–4 weeks</span></div>
+          <div class="phase-body">
+            <h3>One glass shape, matched</h3>
+            <ul>
+              <li>Start <code>embun-render</code>: winit and wgpu, a backdrop texture, one rounded rectangle on top. The prototype above is this phase in WebGL2.</li>
+              <li>Build it to WebAssembly as well and swap it into this page's demo.</li>
+              <li>Build the shader in layers: shape, frost, lensing, rim light, tint and saturation, color fringe.</li>
+              <li>Every parameter gets a live slider in an egui debug panel. egui is for tooling only and never ships in the library.</li>
+            </ul>
+            <p class="done"><b>Done when</b> SSIM is 0.95 or higher on all 18 toolbar shots. That threshold is our own target, set to be tightened later.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <div class="phase-meta"><span class="phase-num">Phase 2</span><span class="phase-time">3–5 weeks</span></div>
+          <div class="phase-body">
+            <h3>Renderer architecture</h3>
+            <ul>
+              <li>A render graph: content layers, then backdrop capture, then the glass pass, then the content that sits on the glass.</li>
+              <li>One blur pyramid per frame, shared by every glass element.</li>
+              <li>All glass shapes drawn in one instanced pass.</li>
+              <li>Glass on glass: one extra backdrop capture per nesting level, with a depth limit.</li>
+              <li>A merge container, our version of Apple's <code>GlassEffectContainer</code>. It blends nearby shapes with a smooth minimum and animates with springs.</li>
+              <li>Damage tracking, so regions that didn't change aren't blurred again.</li>
+            </ul>
+            <p class="done"><b>Done when</b> 20 glass shapes on a 1080p window take under 2 ms of GPU time on an integrated GPU.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <div class="phase-meta"><span class="phase-num">Phase 3</span><span class="phase-time">2–3 weeks</span></div>
+          <div class="phase-body">
+            <h3>Platforms and quality tiers</h3>
+            <ul>
+              <li>Run on Metal, Vulkan, DX12, WebGPU and WebGL2, using the tiers below.</li>
+              <li>Read each OS's reduce transparency, increase contrast and reduce motion settings.</li>
+              <li>Golden-image tests in CI: render offscreen on each backend and compare to stored images.</li>
+            </ul>
+            <p class="done"><b>Done when</b> the same scene passes golden tests on all five backends.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <div class="phase-meta"><span class="phase-num">Phase 4</span><span class="phase-time">6–10 weeks</span></div>
+          <div class="phase-body">
+            <h3>The embun framework</h3>
+            <ul>
+              <li>Widget tree, state, event routing, focus and IME, on the crate stack below.</li>
+              <li>Spring animations as the default, since every motion in macOS 27 is spring-based.</li>
+              <li>Text on glass picks its color from the measured backdrop, the same adaptive tint the prototype uses.</li>
+            </ul>
+            <p class="done"><b>Done when</b> a sample settings app runs on macOS, Windows and Linux with screen reader support.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <div class="phase-meta"><span class="phase-num">Phase 5</span><span class="phase-time">Ongoing</span></div>
+          <div class="phase-body">
+            <h3>Components</h3>
+            <p>Groups 0 to 4 from the components table, in order. Groups 0 and 1 can start alongside Phase 4.</p>
+            <p class="done"><b>Done when</b> each component passes its Phase 0 screenshot comparison.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" aria-labelledby="s-tiers">
+      <h2 id="s-tiers">Quality tiers</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tier</th><th>Used on</th><th>What it draws</th></tr></thead>
+          <tbody>
+            <tr><td>Full</td><td>Metal, Vulkan, DX12, WebGPU on capable GPUs</td><td>Every layer: frost, lensing, rim light, color fringe, merging</td></tr>
+            <tr><td>Reduced</td><td>WebGL2, low-end mobile GPUs</td><td>Cheaper blur, simpler lensing, no color fringe</td></tr>
+            <tr><td>Opaque</td><td>Reduce Transparency on, or a GPU too slow for Reduced</td><td>A solid tinted surface with a faint rim</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sec" aria-labelledby="s-stack">
+      <h2 id="s-stack">Crate stack</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Job</th><th>Crate</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>GPU</td><td><code>wgpu</code></td><td>One API over Metal, Vulkan, DX12, WebGPU and WebGL2</td></tr>
+            <tr><td>Windows and input</td><td><code>winit</code></td><td>The standard choice, used by most Rust GUI projects</td></tr>
+            <tr><td>Layout</td><td><code>taffy</code></td><td>Flexbox and grid, already used by Bevy and Dioxus</td></tr>
+            <tr><td>Text</td><td><code>parley</code></td><td>Shaping, bidirectional text and rich text from the Linebender project</td></tr>
+            <tr><td>Accessibility</td><td><code>accesskit</code></td><td>Screen reader support on macOS, Windows and Linux</td></tr>
+            <tr><td>Debug panel</td><td><code>egui</code></td><td>Tuning sliders during development only</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sec" aria-labelledby="s-wgsl">
+      <h2 id="s-wgsl">The core shader in WGSL</h2>
+      <p>This is the heart of the prototype above, written for wgpu. The shape is a signed distance field. Lensing pushes the sample point inward near the rim, then the frosted backdrop is tinted and lit.</p>
+<pre><code>fn sd_round_box(p: vec2f, b: vec2f, r: f32) -&gt; f32 {
+    let q = abs(p) - b + vec2f(r);
+    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+// Blends two shapes so nearby glass merges like water drops.
+fn smin(a: f32, b: f32, k: f32) -&gt; f32 {
+    let h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+fn frost(px: vec2f, radius: f32) -&gt; vec3f {
+    let lod = max(log2(radius * 0.35), 0.0);
+    var acc = vec3f(0.0);
+    for (var i = 0u; i &lt; 16u; i++) {
+        let f = f32(i);
+        let a = f * 2.39996;                       // golden angle
+        let r = sqrt((f + 0.5) / 16.0) * radius;
+        let uv = (px + vec2f(cos(a), sin(a)) * r) / u.backdrop_size;
+        acc += textureSampleLevel(backdrop, samp, uv, lod).rgb;
+    }
+    return acc / 16.0;
+}
+
+fn shade_glass(px: vec2f, d: f32, n: vec2f, appearance: f32) -&gt; vec3f {
+    let level = u.glass_level;                     // 0 = ultra clear, 1 = tinted
+    let edge = 1.0 - clamp(-d / u.bevel, 0.0, 1.0);
+    let lens = -n * pow(edge, 2.2) * u.bevel * 0.9 * mix(1.0, 0.6, level);
+    var c = frost(px + lens, mix(3.0, 20.0, level));
+    let luma = dot(c, vec3f(0.2126, 0.7152, 0.0722));
+    c = mix(vec3f(luma), c, mix(1.45, 1.15, level)); // saturation boost
+    let tint = mix(vec3f(0.985), vec3f(0.11), appearance);
+    c = mix(c, tint, mix(0.03, 0.8, level));
+    let l = dot(n, normalize(vec2f(-0.55, -0.85))); // light from top left
+    let rim = smoothstep(1.6, 0.0, -d);
+    c = mix(c, vec3f(1.0), rim * (pow(max(l, 0.0), 1.5) * 0.85 + pow(max(-l, 0.0), 1.5) * 0.35));
+    return c;
+}</code></pre>
+    </section>
+
+    <section class="sec" aria-labelledby="s-risks">
+      <h2 id="s-risks">Risks</h2>
+      <ul>
+        <li><b>Text on glass becomes hard to read.</b> This was the main complaint about macOS 26. Adaptive tint and text color go in during Phase 1, not as a later fix.</li>
+        <li><b>Blur is expensive on web and mobile.</b> The quality tiers handle it. Measure on a real mid-range phone before promising mobile support.</li>
+        <li><b>No glass over the desktop.</b> Our glass bends only what our app draws. Transparent windows work differently on each OS, so they stay out of version 1.</li>
+        <li><b>The reference drifts.</b> Apple may change the look in 27.1 or 28. The freeze in Phase 0 keeps that from becoming endless rework.</li>
+        <li><b>Phase 4 grows into its own project.</b> That's why the renderer ships first as a crate other UI libraries can use.</li>
+      </ul>
+    </section>
+
+    <section class="sources" aria-labelledby="s-src">
+      <h2 id="s-src" class="eyebrow">Sources for the macOS 27 changes</h2>
+      <ul>
+        <li><a href="https://www.macstories.net/stories/macos-27-the-macstories-review/2/">macOS 27: The MacStories Review</a></li>
+        <li><a href="https://www.cultofmac.com/news/liquid-glass-changes-ios-27-macos-27">Cult of Mac: Liquid Glass changes in iOS 27 and macOS 27</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Liquid_Glass">Wikipedia: Liquid Glass</a></li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const stage = document.getElementById('stage');
+  let canvas = document.getElementById('glass');
+  const overlay = document.getElementById('overlay');
+  const engineNote = document.getElementById('engine');
+
+  // Prefer the real Rust renderer (embun-render compiled to wasm). If it can't
+  // load here, fall back to the JavaScript prototype of the same shader.
+  let rust = null, gl = null;
+  try {
+    const mod = await import('./embun/embun_web.js');
+    await mod.default();
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(stage.clientWidth * ratio); canvas.height = Math.round(stage.clientHeight * ratio);
+    rust = await mod.EmbunView.create(canvas);
+    const api = rust.backend() === 'BrowserWebGpu' ? 'WebGPU' : 'WebGL2';
+    engineNote.textContent = `Running embun-render, compiled from Rust to WebAssembly, on ${api}.`;
+  } catch (err) {
+    console.warn('Rust renderer unavailable, using the JavaScript prototype:', err);
+    rust = null;
+    const fresh = canvas.cloneNode(false); canvas.replaceWith(fresh); canvas = fresh;
+    engineNote.textContent = 'Running the JavaScript prototype, because the Rust build could not load in this browser.';
+  }
+  if (!rust) {
+    gl = canvas.getContext('webgl2', { antialias: false });
+    if (!gl) { document.getElementById('nogl').hidden = false; return; }
+  }
+
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const rootTheme = document.documentElement.getAttribute('data-theme');
+  const startDark = rootTheme ? rootTheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+
+  const state = {
+    level: 0.5, dark: startDark ? 1 : 0, mode: 'photos',
+    blur: true, refract: true, rim: false, fringe: true, shadow: false, merge: true, adaptive: true, reduce: false,
+    scrolling: !reducedMotion, scroll: 0
+  };
+  if (startDark) document.getElementById('app-dark').checked = true;
+
+  // ---------- Backdrop ----------
+  const TEX_W = 1200, TEX_H = 1782, LUM_S = 6;
+  const bd = document.createElement('canvas'); bd.width = TEX_W; bd.height = TEX_H;
+  const c = bd.getContext('2d');
+  const lumC = document.createElement('canvas'); lumC.width = TEX_W / LUM_S; lumC.height = TEX_H / LUM_S;
+  const lctx = lumC.getContext('2d', { willReadFrequently: true });
+  let lum = new Float32Array(lumC.width * lumC.height);
+
+  function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function rr(x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+
+  function scene(x, y, w, h, r) {
+    const h0 = r() * 360, night = r() < 0.3;
+    const g = c.createLinearGradient(0, y, 0, y + h);
+    if (night) { g.addColorStop(0, `hsl(${h0},55%,12%)`); g.addColorStop(1, `hsl(${h0 + 30},60%,32%)`); }
+    else { g.addColorStop(0, `hsl(${h0},75%,74%)`); g.addColorStop(1, `hsl(${h0 + 40},80%,56%)`); }
+    c.fillStyle = g; c.fillRect(x, y, w, h);
+    if (night) { c.fillStyle = 'rgba(255,255,255,0.85)'; for (let i = 0; i < 26; i++) c.fillRect(x + r() * w, y + r() * h * 0.6, 2, 2); }
+    c.fillStyle = night ? `hsl(${h0 + 50},30%,90%)` : `hsl(${h0 + 60},95%,88%)`;
+    c.beginPath(); c.arc(x + w * (0.2 + r() * 0.6), y + h * (0.2 + r() * 0.25), w * (0.08 + r() * 0.06), 0, Math.PI * 2); c.fill();
+    for (let layer = 0; layer < 2; layer++) {
+      c.fillStyle = layer === 0 ? `hsl(${h0 + 200},35%,${night ? 18 : 34}%)` : `hsl(${h0 + 180},30%,${night ? 8 : 18}%)`;
+      c.beginPath(); c.moveTo(x, y + h);
+      const base = y + h * (0.55 + layer * 0.15);
+      for (let i = 0; i <= 6; i++) c.lineTo(x + (w / 6) * i, base - r() * h * 0.22);
+      c.lineTo(x + w, y + h); c.closePath(); c.fill();
+    }
+  }
+
+  function drawPhotos(dark) {
+    c.fillStyle = dark ? '#101114' : '#f4f4f6'; c.fillRect(0, 0, TEX_W, TEX_H);
+    const cols = 4, gap = 12, tile = (TEX_W - gap * (cols + 1)) / cols, pitch = tile + gap;
+    const rows = Math.round(TEX_H / pitch), r = rng(11);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const px = gap + x * pitch, py = gap / 2 + y * pitch;
+      c.save(); rr(px, py, tile, tile, 10); c.clip(); scene(px, py, tile, tile, r); c.restore();
+    }
+  }
+
+  const ARTICLE = [
+    ['h', 'Light through a slab'],
+    ['p', 'Liquid Glass treats every control as a thin slab of glass resting on the content. Light bends at the curved rim, so the content just inside the edge looks stretched and pulled toward the center.'],
+    ['p', 'Behind the rim, the glass is frosted. The backdrop is blurred, its colors get a little more saturated, and a tint is mixed in so labels stay readable over busy photos and plain text alike.'],
+    ['img'],
+    ['h', 'Frost and tint'],
+    ['p', 'In macOS 27 the amount of frost is a system setting. The Appearance slider runs from ultra clear to fully tinted, and the default sits in the middle, frostier than macOS 26.'],
+    ['h', 'Shapes that merge'],
+    ['p', 'When two glass shapes come close, they merge like drops of water. The prototype blends their distance fields with a smooth minimum, then lights the combined shape as one surface.']
+  ];
+  function wrapText(text, x, y, maxW, lh) {
+    const words = text.split(' '); let line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (c.measureText(test).width > maxW && line) { c.fillText(line, x, y); y += lh; line = w; } else line = test;
+    }
+    if (line) { c.fillText(line, x, y); y += lh; }
+    return y;
+  }
+  function drawArticle(dark) {
+    c.fillStyle = dark ? '#16171a' : '#fbfbfc'; c.fillRect(0, 0, TEX_W, TEX_H);
+    const fg = dark ? '#ececef' : '#1d1d1f', margin = 150, width = TEX_W - margin * 2;
+    let y = 150; c.textBaseline = 'alphabetic';
+    const r = rng(5);
+    for (const [kind, text] of ARTICLE) {
+      if (kind === 'h') { c.fillStyle = fg; c.font = '700 48px "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif'; y += 20; y = wrapText(text, margin, y, width, 58) + 8; }
+      else if (kind === 'p') { c.fillStyle = fg; c.font = '400 27px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif'; y = wrapText(text, margin, y, width, 42) + 20; }
+      else { c.save(); rr(margin, y, width, 250, 18); c.clip(); scene(margin, y, width, 250, r); c.restore(); y += 290; }
+    }
+  }
+  function drawChecker(dark) {
+    const a = dark ? '#24262b' : '#ffffff', b = dark ? '#0e0f12' : '#d9dce3', cell = 54;
+    for (let y = 0; y < TEX_H / cell; y++) for (let x = 0; x < Math.ceil(TEX_W / cell); x++) { c.fillStyle = (x + y) % 2 ? a : b; c.fillRect(x * cell, y * cell, cell, cell); }
+    c.fillStyle = '#e0442a'; for (let y = 0; y < TEX_H; y += cell * 5) c.fillRect(0, y, TEX_W, 4);
+    c.fillStyle = '#2a6ee0'; for (let x = 0; x < TEX_W; x += cell * 5) c.fillRect(x, 0, 4, TEX_H);
+  }
+
+  const tex = gl ? gl.createTexture() : null;
+  function regen() {
+    const dark = state.dark > 0.5;
+    if (state.mode === 'photos') drawPhotos(dark); else if (state.mode === 'article') drawArticle(dark); else drawChecker(dark);
+    if (rust) {
+      rust.set_backdrop(new Uint8Array(c.getImageData(0, 0, TEX_W, TEX_H).data.buffer), TEX_W, TEX_H);
+    } else {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bd);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+      gl.generateMipmap(gl.TEXTURE_2D);
+    }
+    lctx.drawImage(bd, 0, 0, lumC.width, lumC.height);
+    const px = lctx.getImageData(0, 0, lumC.width, lumC.height).data;
+    for (let i = 0; i < lum.length; i++) lum[i] = (0.2126 * px[i * 4] + 0.7152 * px[i * 4 + 1] + 0.0722 * px[i * 4 + 2]) / 255;
+    const title = overlay.querySelector('[data-title]');
+    if (title) title.textContent = { photos: 'Library', article: 'Reading', checker: 'Test grid' }[state.mode];
+    needs = true;
+  }
+
+  // ---------- Shader ----------
+  const VS = `#version 300 es
+  void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+  const FS = `#version 300 es
+  precision highp float;
+  uniform sampler2D uTex;
+  uniform vec2 uRes; uniform float uDpr; uniform float uScale; uniform float uScroll; uniform vec2 uTexSize;
+  uniform int uCount; uniform vec4 uShape[8]; uniform float uRad[8]; uniform float uApp[8];
+  uniform float uBlur, uTint, uRefract, uRim, uFringe, uShadow, uK, uSat;
+  out vec4 outColor;
+  float sdRB(vec2 p, vec2 b, float r){ r = min(r, min(b.x, b.y)); vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
+  float smin(float a, float b, float k){ if (k <= 0.0) return min(a, b); float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+  float scene(vec2 p){ float d = 1e5; for (int i = 0; i < 8; i++){ if (i >= uCount) break; vec4 s = uShape[i]; d = smin(d, sdRB(p - s.xy, s.zw, uRad[i]), uK); } return d; }
+  float appAt(vec2 p){ float a = 0.0, ws = 0.0; for (int i = 0; i < 8; i++){ if (i >= uCount) break; vec4 s = uShape[i]; float di = sdRB(p - s.xy, s.zw, uRad[i]); float w = exp(-max(di, 0.0) / 16.0); a += w * uApp[i]; ws += w; } return a / max(ws, 1e-4); }
+  vec3 bd(vec2 css, float lod){ vec2 uv = vec2(css.x * uScale, css.y * uScale + uScroll) / uTexSize; return textureLod(uTex, uv, lod).rgb; }
+  vec3 frost(vec2 p, float r){
+    if (r < 0.5) return bd(p, 0.0);
+    float lod = max(log2(r * uScale * 0.35), 0.0); vec3 acc = vec3(0.0);
+    for (int i = 0; i < 16; i++){ float f = float(i); float a = f * 2.39996323; float rr = sqrt((f + 0.5) / 16.0) * r; acc += bd(p + vec2(cos(a), sin(a)) * rr, lod); }
+    return acc / 16.0;
+  }
+  void main(){
+    vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uDpr;
+    float d = scene(p);
+    vec3 bg = bd(p, 0.0);
+    if (uShadow > 0.0){ float ds = scene(p - vec2(0.0, 6.0)); float sh = ds < 0.0 ? 1.0 : exp(-ds / 14.0); bg *= 1.0 - sh * 0.22 * uShadow; }
+    float cov = clamp(0.5 - d * uDpr, 0.0, 1.0);
+    if (cov <= 0.0){ outColor = vec4(bg, 1.0); return; }
+    vec2 e = vec2(0.75, 0.0);
+    vec2 g = vec2(scene(p + e.xy) - scene(p - e.xy), scene(p + e.yx) - scene(p - e.yx));
+    vec2 n = length(g) > 1e-5 ? normalize(g) : vec2(0.0, -1.0);
+    float bw = 18.0;
+    float edge = 1.0 - clamp(-d / bw, 0.0, 1.0);
+    vec2 disp = -n * pow(edge, 2.2) * bw * 0.9 * uRefract;
+    vec3 col = frost(p + disp, uBlur);
+    if (uFringe > 0.0 && edge > 0.03){ float f = 0.12 * uFringe; col.r = frost(p + disp * (1.0 + f), uBlur).r; col.b = frost(p + disp * (1.0 - f), uBlur).b; }
+    float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col = mix(vec3(l), col, uSat);
+    float app = appAt(p);
+    vec3 tint = mix(vec3(0.985, 0.988, 0.995), vec3(0.11, 0.115, 0.125), app);
+    col = mix(col, tint, uTint);
+    vec2 L = normalize(vec2(-0.55, -0.85));
+    float ld = dot(n, L);
+    float rim = smoothstep(1.6, 0.0, -d);
+    float spec = pow(max(ld, 0.0), 1.5) * 0.85 + pow(max(-ld, 0.0), 1.5) * 0.35;
+    col = mix(col, vec3(1.0), rim * spec * uRim * mix(1.0, 0.7, app));
+    col += pow(edge, 3.0) * 0.10 * uRim * (0.4 + 0.6 * max(ld, 0.0));
+    float hair = smoothstep(1.2, 0.0, abs(d + 0.5));
+    col = mix(col, vec3(app), hair * 0.07);
+    outColor = vec4(mix(bg, clamp(col, 0.0, 1.0), cov), 1.0);
+  }`;
+  function compile(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) fail('Shader failed to compile: ' + gl.getShaderInfoLog(s)); return s; }
+  function fail(msg) { const n = document.getElementById('nogl'); n.textContent = msg; n.hidden = false; console.error(msg); throw new Error(msg); }
+  let prog = null;
+  const U = {};
+  if (gl) {
+    prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) fail('Shader failed to link: ' + gl.getProgramInfoLog(prog));
+    gl.bindVertexArray(gl.createVertexArray());
+    ['uTex','uRes','uDpr','uScale','uScroll','uTexSize','uCount','uShape','uRad','uApp','uBlur','uTint','uRefract','uRim','uFringe','uShadow','uK','uSat'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+  }
+
+  // ---------- Shapes and overlay ----------
+  const ICON = {
+    sidebar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M9 5v14"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5"/><path d="M6 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-8"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>'
+  };
+  let shapes = [];
+  function makeChip(cls, html) { const el = document.createElement('div'); el.className = 'chip ' + cls; el.innerHTML = html; overlay.appendChild(el); return el; }
+  function layout() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    overlay.innerHTML = '';
+    const tbW = Math.min(w - 32, 460);
+    shapes = [
+      { cx: w * 0.32, cy: h * 0.56, hw: Math.min(96, w * 0.22), hh: Math.min(60, h * 0.13), r: 34, el: makeChip('lens', '') },
+      { cx: w - 56 - 84, cy: h - 60, hw: 28, hh: 28, r: 28, el: makeChip('btn', ICON.plus) },
+      { cx: w - 56, cy: h - 60, hw: 28, hh: 28, r: 28, el: makeChip('btn', ICON.heart) },
+      { cx: w / 2, cy: 18 + 26, hw: tbW / 2, hh: 26, r: 26,
+        el: makeChip('toolbar', `<span class="grp">${ICON.sidebar}${ICON.back}</span><span data-title></span><span class="grp">${ICON.share}${ICON.search}</span>`) }
+    ];
+    shapes.forEach(s => { s.app = state.dark; s.target = state.dark; s.ink = state.dark; });
+    const title = overlay.querySelector('[data-title]');
+    title.textContent = { photos: 'Library', article: 'Reading', checker: 'Test grid' }[state.mode];
+    if (tbW < 300) title.hidden = true;
+    needs = true;
+  }
+
+  let dpr = 1, W = 0, H = 0;
+  const backdropScale = () => TEX_W / Math.max(W, 720);
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = stage.clientWidth; H = stage.clientHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    if (rust) rust.resize(W, H, dpr);
+    layout();
+  }
+
+  function sampleLum(s, scale) {
+    const cols = lumC.width, rows = lumC.height;
+    const x0 = Math.max(0, Math.floor((s.cx - s.hw) * scale / LUM_S)), x1 = Math.min(cols - 1, Math.floor((s.cx + s.hw) * scale / LUM_S));
+    const y0 = Math.floor(((s.cy - s.hh) * scale + state.scroll) / LUM_S), y1 = Math.floor(((s.cy + s.hh) * scale + state.scroll) / LUM_S);
+    let sum = 0, n = 0;
+    for (let y = y0; y <= y1; y++) { const row = ((y % rows) + rows) % rows; for (let x = x0; x <= x1; x++) { sum += lum[row * cols + x]; n++; } }
+    return n ? sum / n : 0.5;
+  }
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const params = () => {
+    const L = state.level, R = state.reduce;
+    return {
+      blur: state.blur ? (R ? 30 : lerp(3, 20, L)) : 0,
+      tint: R ? 0.92 : lerp(0.03, 0.8, Math.pow(L, 1.1)),
+      refract: state.refract && !R ? lerp(1.0, 0.6, L) : 0,
+      rim: state.rim ? (R ? 0.3 : 1) : 0,
+      fringe: state.fringe && !R ? 1 : 0,
+      shadow: state.shadow ? 1 : 0,
+      k: state.merge ? 22 : 0,
+      sat: R ? 1 : lerp(1.45, 1.15, L)
+    };
+  };
+
+  function updateShapes(dt) {
+    const P = params(), scale = backdropScale(), k = Math.min(1, dt * 7);
+    let changed = false;
+    for (const s of shapes) {
+      const bl = sampleLum(s, scale);
+      if (state.adaptive) { if (bl > 0.6) s.target = 0; else if (bl < 0.42) s.target = 1; }
+      else s.target = state.dark;
+      const na = lerp(s.app, s.target, k);
+      if (Math.abs(na - s.app) > 1e-3) changed = true;
+      s.app = Math.abs(na - s.target) < 1e-3 ? s.target : na;
+      const glassLum = lerp(bl, lerp(0.98, 0.11, s.app), P.tint);
+      const inkTarget = glassLum > 0.56 ? 0 : glassLum < 0.46 ? 1 : (s.inkTarget ?? 0);
+      s.inkTarget = inkTarget;
+      s.ink = Math.abs(s.ink - inkTarget) < 1e-3 ? inkTarget : lerp(s.ink, inkTarget, k);
+      const v = Math.round(lerp(29, 255, s.ink));
+      s.el.style.color = `rgb(${v},${v},${Math.round(lerp(31, 255, s.ink))})`;
+      s.el.style.width = s.hw * 2 + 'px'; s.el.style.height = s.hh * 2 + 'px';
+      s.el.style.transform = `translate(${s.cx - s.hw}px, ${s.cy - s.hh}px)`;
+    }
+    return changed;
+  }
+
+  const rustShapes = new Float32Array(6 * 16);
+  function drawRust() {
+    shapes.forEach((s, i) => rustShapes.set([s.cx, s.cy, s.hw, s.hh, s.r, s.app], i * 6));
+    rust.set_shapes(rustShapes.subarray(0, shapes.length * 6));
+    rust.set_glass(state.level, state.blur, state.refract, state.rim, state.fringe, state.shadow, state.merge, state.reduce);
+    rust.set_scroll(state.scroll, backdropScale());
+    rust.render();
+  }
+
+  const shapeBuf = new Float32Array(32), radBuf = new Float32Array(8), appBuf = new Float32Array(8);
+  function draw() {
+    if (rust) { drawRust(); return; }
+    const P = params();
+    shapes.forEach((s, i) => { shapeBuf.set([s.cx, s.cy, s.hw, s.hh], i * 4); radBuf[i] = s.r; appBuf[i] = s.app; });
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(prog);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniform1i(U.uTex, 0);
+    gl.uniform2f(U.uRes, canvas.width, canvas.height);
+    gl.uniform1f(U.uDpr, dpr);
+    gl.uniform1f(U.uScale, backdropScale());
+    gl.uniform1f(U.uScroll, state.scroll);
+    gl.uniform2f(U.uTexSize, TEX_W, TEX_H);
+    gl.uniform1i(U.uCount, shapes.length);
+    gl.uniform4fv(U.uShape, shapeBuf); gl.uniform1fv(U.uRad, radBuf); gl.uniform1fv(U.uApp, appBuf);
+    gl.uniform1f(U.uBlur, P.blur); gl.uniform1f(U.uTint, P.tint); gl.uniform1f(U.uRefract, P.refract);
+    gl.uniform1f(U.uRim, P.rim); gl.uniform1f(U.uFringe, P.fringe); gl.uniform1f(U.uShadow, P.shadow);
+    gl.uniform1f(U.uK, P.k); gl.uniform1f(U.uSat, P.sat);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  let needs = true, last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (state.scrolling) { state.scroll = (state.scroll + dt * 26 * backdropScale()) % TEX_H; needs = true; }
+    if (W > 0) { if (updateShapes(dt)) needs = true; }
+    if (needs && W > 0) { draw(); needs = false; }
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Dragging ----------
+  function sd(s, x, y) { const r = Math.min(s.r, s.hw, s.hh); const qx = Math.abs(x - s.cx) - s.hw + r, qy = Math.abs(y - s.cy) - s.hh + r; return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r; }
+  function hit(x, y) { for (let i = shapes.length - 1; i >= 0; i--) if (sd(shapes[i], x, y) < 0) return shapes[i]; return null; }
+  let drag = null;
+  const local = e => { const b = canvas.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  canvas.addEventListener('pointerdown', e => {
+    const [x, y] = local(e); const s = hit(x, y); if (!s) return;
+    drag = { s, dx: s.cx - x, dy: s.cy - y }; canvas.setPointerCapture(e.pointerId); canvas.className = 'grabbing';
+  });
+  canvas.addEventListener('pointermove', e => {
+    const [x, y] = local(e);
+    if (!drag) { canvas.className = hit(x, y) ? 'grab' : ''; return; }
+    const s = drag.s;
+    s.cx = Math.min(W - s.hw, Math.max(s.hw, x + drag.dx));
+    s.cy = Math.min(H - s.hh, Math.max(s.hh, y + drag.dy));
+    needs = true;
+  });
+  const end = () => { drag = null; canvas.className = ''; };
+  canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
+
+  // ---------- Controls ----------
+  const form = document.getElementById('controls');
+  form.addEventListener('submit', e => e.preventDefault());
+  const levelOut = document.getElementById('level-out');
+  document.getElementById('level').addEventListener('input', e => { state.level = e.target.value / 100; levelOut.textContent = state.level.toFixed(2); needs = true; });
+  form.querySelectorAll('input[name="appearance"]').forEach(r => r.addEventListener('change', () => { state.dark = r.value === 'dark' ? 1 : 0; regen(); }));
+  form.querySelectorAll('input[name="backdrop"]').forEach(r => r.addEventListener('change', () => { state.mode = r.value; regen(); }));
+  const flags = { 'f-blur': 'blur', 'f-refract': 'refract', 'f-rim': 'rim', 'f-fringe': 'fringe', 'f-shadow': 'shadow', 'f-merge': 'merge', 'f-adaptive': 'adaptive', 'f-reduce': 'reduce' };
+  Object.entries(flags).forEach(([id, key]) => document.getElementById(id).addEventListener('change', e => { state[key] = e.target.checked; needs = true; }));
+  const scrollBtn = document.getElementById('toggle-scroll');
+  const syncScrollBtn = () => { scrollBtn.textContent = state.scrolling ? 'Pause scrolling' : 'Resume scrolling'; };
+  scrollBtn.addEventListener('click', () => { state.scrolling = !state.scrolling; syncScrollBtn(); });
+  syncScrollBtn();
+  document.getElementById('reset').addEventListener('click', layout);
+
+  new ResizeObserver(resize).observe(stage);
+  resize();
+  regen();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(regen);
+  requestAnimationFrame(frame);
+})();
+</script>

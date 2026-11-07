@@ -1,0 +1,18 @@
+[package]
+name = "embun-web"
+description = "Browser build of embun-render for the demo page"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+embun-render.workspace = true
+wgpu = { workspace = true, features = ["webgl"] }
+wasm-bindgen = "=0.2.130"
+wasm-bindgen-futures = "0.4.80"
+web-sys = { version = "0.3.107", features = ["HtmlCanvasElement"] }
+console_error_panic_hook = "0.1.7"

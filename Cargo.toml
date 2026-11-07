@@ -1,0 +1,25 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/embun-render",
+    "crates/embun-motion",
+    "crates/embun",
+    "crates/embun-web",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+embun-render = { path = "crates/embun-render" }
+embun-motion = { path = "crates/embun-motion" }
+wgpu = "30.0.1"
+bytemuck = { version = "1.25", features = ["derive"] }
+pollster = "1.0"
+png = "0.18"
+
+[profile.release]
+opt-level = "s"
+lto = true
