@@ -1,7 +1,7 @@
 // Glass pass: one fullscreen triangle. Pixels outside every shape show the
 // backdrop; pixels inside are frosted, lensed and recolored, and a one-pixel
 // outline sits just outside the shape. Frost and color math run on
-// gamma-encoded values, which fits the macOS 27 captures better than linear.
+// sRGB-encoded values, which fits the macOS 27 captures better than linear.
 
 struct Uniforms {
     viewport: vec2f,        // logical px
@@ -20,8 +20,8 @@ struct Uniforms {
     outline_dark: f32,
     output_gamma: f32,      // 1 when the target is not an sRGB format
     bevel: f32,             // logical px
+    blur_lod: f32,          // mip level that holds the blurred backdrop
     _pad1: f32,
-    _pad2: f32,
     body_light: vec4f,      // offset, gain, curve, chroma
     body_dark: vec4f,
     shapes: array<vec4f, 16>, // center.xy, half_size.xy
@@ -31,6 +31,7 @@ struct Uniforms {
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var backdrop: texture_2d<f32>;
 @group(0) @binding(2) var samp: sampler;
+@group(0) @binding(3) var blurred: texture_2d<f32>; // gamma-encoded, at mip blur_lod
 
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -42,10 +43,28 @@ fn spow(x: f32, y: f32) -> f32 {
     return pow(max(x, 1e-6), y);
 }
 
+// Apple's continuous corners, fitted to macOS 27 captures: the corner curve
+// starts CORNER_REACH times the radius from the corner and follows a
+// superellipse with exponent CORNER_POWER. When the radius approaches half the
+// shorter side (capsules, circles) it blends back to a circular arc, as macOS
+// does.
+const CORNER_REACH: f32 = 1.24;
+const CORNER_POWER: f32 = 2.6;
+
 fn sd_round_box(p: vec2f, b: vec2f, r_in: f32) -> f32 {
-    let r = min(r_in, min(b.x, b.y));
-    let q = abs(p) - b + vec2f(r);
-    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
+    let half = min(b.x, b.y);
+    let r = min(r_in, half);
+    let t = clamp((half - r) / max((CORNER_REACH - 1.0) * r, 1e-4), 0.0, 1.0);
+    let a = r * mix(1.0, CORNER_REACH, t);
+    let n = mix(2.0, CORNER_POWER, t);
+    let q = abs(p) - b + vec2f(a);
+    if (q.x > 0.0 && q.y > 0.0) {
+        // Distance to the superellipse, corrected by the gradient length.
+        let m = pow(pow(q.x, n) + pow(q.y, n), 1.0 / n);
+        let grad = pow(q / m, vec2f(n - 1.0));
+        return (m - a) / max(length(grad), 1e-4);
+    }
+    return max(q.x, q.y) - a;
 }
 
 // Smooth minimum: blends two distance fields so nearby shapes merge.
@@ -85,35 +104,32 @@ fn backdrop_linear(css: vec2f, lod: f32) -> vec3f {
     return textureSampleLevel(backdrop, samp, texel / u.backdrop_size, lod).rgb;
 }
 
+// Exact sRGB transfer functions. The body was fitted to sRGB-encoded PNG
+// values, so the shader must encode the same way, especially in dark tones.
 fn to_gamma(c: vec3f) -> vec3f {
-    return pow(max(c, vec3f(1e-6)), vec3f(1.0 / 2.2));
+    let x = max(c, vec3f(0.0));
+    return select(1.055 * pow(x, vec3f(1.0 / 2.4)) - 0.055, 12.92 * x, x <= vec3f(0.0031308));
 }
 
-const FROST_TAPS: u32 = 24u;
+fn to_linear(c: vec3f) -> vec3f {
+    let x = max(c, vec3f(0.0));
+    return select(pow((x + 0.055) / 1.055, vec3f(2.4)), x / 12.92, x <= vec3f(0.04045));
+}
 
-// Gaussian frost: golden-angle taps whose radii follow the Gaussian's radial
-// distribution, so equal weights give a Gaussian. Each tap reads a mip level
-// that already averages the gaps between taps. Taps are averaged gamma-encoded.
-fn frost(p: vec2f, sigma: f32) -> vec3f {
-    if (sigma < 0.25) {
+// Frost: the backdrop blurred by a separable Gaussian before this pass.
+fn frost(p: vec2f) -> vec3f {
+    if (u.blur < 0.25) {
         return to_gamma(backdrop_linear(p, 0.0));
     }
-    let lod = max(log2(sigma * u.backdrop_scale * 0.5), 0.0);
-    var acc = vec3f(0.0);
-    for (var i = 0u; i < FROST_TAPS; i++) {
-        let f = f32(i);
-        let a = f * 2.39996323;
-        let rr = sigma * sqrt(-2.0 * log(1.0 - (f + 0.5) / f32(FROST_TAPS)));
-        acc += to_gamma(backdrop_linear(p + vec2f(cos(a), sin(a)) * rr, lod));
-    }
-    return acc / f32(FROST_TAPS);
+    let texel = vec2f(p.x * u.backdrop_scale, p.y * u.backdrop_scale + u.scroll);
+    return textureSampleLevel(blurred, samp, texel / u.backdrop_size, u.blur_lod).rgb;
 }
 
 fn finish(c: vec3f) -> vec4f {
     if (u.output_gamma > 0.5) {
         return vec4f(c, 1.0);
     }
-    return vec4f(pow(max(c, vec3f(0.0)), vec3f(2.2)), 1.0);
+    return vec4f(to_linear(c), 1.0);
 }
 
 @fragment
@@ -131,31 +147,43 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         bg = bg * (1.0 - sh * 0.22 * u.shadow);
     }
 
-    // Coverage of the shape, and of the shape grown by one device pixel.
-    let cov = clamp(0.5 - d * u.scale_factor, 0.0, 1.0);
-    let outer = clamp(1.5 - d * u.scale_factor, 0.0, 1.0);
+    // Far outside every shape: just the backdrop.
+    if (d * u.scale_factor > 3.0) {
+        return finish(bg);
+    }
+
+    // Surface gradient of the distance field. Its length is 1 along simple
+    // edges and falls below 1 where shapes merge (toward 0 in the middle of a
+    // neck); `n` is the normalized outward normal.
+    let e = vec2f(0.75, 0.0);
+    let grad = vec2f(scene(p + e.xy) - scene(p - e.xy), scene(p + e.yx) - scene(p - e.yx)) / (2.0 * e.x);
+    var n = vec2f(0.0, -1.0);
+    if (length(grad) > 1e-5) {
+        n = normalize(grad);
+    }
+
+    // Coverage of the shape, and of the shape grown by one device pixel. The
+    // distance is divided by the gradient length so merged shapes keep a
+    // one-pixel edge and outline.
+    let dp = d * u.scale_factor / max(length(grad), 0.25);
+    let cov = clamp(0.5 - dp, 0.0, 1.0);
+    let outer = clamp(1.5 - dp, 0.0, 1.0);
     let outline = max(u.outline_light, u.outline_dark);
     if (outer <= 0.0 || (cov <= 0.0 && outline <= 0.0)) {
         return finish(bg);
     }
 
-    // Outward surface normal from the distance field.
-    let e = vec2f(0.75, 0.0);
-    let g = vec2f(scene(p + e.xy) - scene(p - e.xy), scene(p + e.yx) - scene(p - e.yx));
-    var n = vec2f(0.0, -1.0);
-    if (length(g) > 1e-5) {
-        n = normalize(g);
-    }
-
-    // Lensing: near the rim, sample further inward, like a convex drop.
+    // Lensing: near the rim, sample further inward, like a convex drop. Using
+    // the unnormalized gradient keeps the shift continuous across a neck,
+    // instead of flipping sides at its center.
     let edge = 1.0 - clamp(-d / u.bevel, 0.0, 1.0);
-    let disp = -n * spow(edge, 2.2) * u.bevel * 0.9 * u.lensing;
+    let disp = -grad * spow(edge, 2.2) * u.bevel * 0.9 * u.lensing;
 
-    var col = frost(p + disp, u.blur);
+    var col = frost(p + disp);
     if (u.fringe > 0.0 && edge > 0.03) {
         let f = 0.12 * u.fringe;
-        col.r = frost(p + disp * (1.0 + f), u.blur).r;
-        col.b = frost(p + disp * (1.0 - f), u.blur).b;
+        col.r = frost(p + disp * (1.0 + f)).r;
+        col.b = frost(p + disp * (1.0 - f)).b;
     }
 
     // Body: a tone curve on luminance plus a chroma gain (fitted to macOS).

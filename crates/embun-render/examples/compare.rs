@@ -98,10 +98,22 @@ fn merge_k(args: &[String], level: f32) -> f32 {
     overrides(args, GlassParams::from_level(level, GlassLayers::default(), false)).merge_k
 }
 
+/// Same as the shader's sd_round_box, continuous corners included.
 fn sd_round_box(p: [f32; 2], s: &GlassShape) -> f32 {
-    let r = s.radius.min(s.half_size[0]).min(s.half_size[1]);
-    let q = [(p[0] - s.center[0]).abs() - s.half_size[0] + r, (p[1] - s.center[1]).abs() - s.half_size[1] + r];
-    (q[0].max(0.0).hypot(q[1].max(0.0))) + q[0].max(q[1]).min(0.0) - r
+    const REACH: f32 = 1.24;
+    const POWER: f32 = 2.6;
+    let half = s.half_size[0].min(s.half_size[1]);
+    let r = s.radius.min(half);
+    let t = ((half - r) / ((REACH - 1.0) * r).max(1e-4)).clamp(0.0, 1.0);
+    let a = r * (1.0 + (REACH - 1.0) * t);
+    let n = 2.0 + (POWER - 2.0) * t;
+    let q = [(p[0] - s.center[0]).abs() - s.half_size[0] + a, (p[1] - s.center[1]).abs() - s.half_size[1] + a];
+    if q[0] > 0.0 && q[1] > 0.0 {
+        let m = (q[0].powf(n) + q[1].powf(n)).powf(1.0 / n);
+        let g = [(q[0] / m).powf(n - 1.0), (q[1] / m).powf(n - 1.0)];
+        return (m - a) / g[0].hypot(g[1]).max(1e-4);
+    }
+    q[0].max(q[1]) - a
 }
 
 /// The shader's merged distance field, in points.

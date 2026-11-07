@@ -201,10 +201,10 @@ pre code { background: none; padding: 0; font-size: inherit; }
       <ul>
         <li>The workspace lives at <code>~/Development/embun</code> with <code>embun-render</code>, <code>embun-motion</code>, <code>embun</code> and <code>embun-web</code>.</li>
         <li><code>embun-render</code> draws frost, lensing, the macOS outline and merging, with rim light and shadow as optional extras. It renders natively on Metal and in the browser through WebAssembly.</li>
-        <li>Phase 0 is done for basic shapes. A capture app put real macOS 27.0.1 glass over our test backdrops at three slider positions, in light and dark: 18 pairs of screenshots. The shader is fitted to them. Average error went from 8–35 to 0.3–2.7 out of 255 per capture.</li>
+        <li>Phase 0 is done for basic shapes. A capture app put real macOS 27.0.1 glass over our test backdrops at three slider positions, in light and dark: 18 pairs of screenshots. The shader is fitted to them. Average error went from 8–35 to 0.0–2.3 out of 255 per capture. Corners use Apple's continuous curve, and merged shapes match the macOS neck within a pixel.</li>
         <li><code>embun-motion</code> has springs with SwiftUI-style response and damping settings.</li>
-        <li>16 tests pass. Six render real frames on the GPU, and one checks glass colors against pixels read from the macOS captures.</li>
-        <li>Next: Apple's continuous corners, a smoother blur, and captures of real controls (toolbar, sidebar, menus) beyond plain shapes.</li>
+        <li>17 tests pass. Seven render real frames on the GPU: one checks glass colors against pixels read from the macOS captures, and one guards against a seam where shapes merge.</li>
+        <li>Next: captures of real controls (toolbar, sidebar, menus) beyond plain shapes, and the lensing at the rim, which matters most at the clear setting.</li>
       </ul>
     </section>
 

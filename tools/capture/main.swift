@@ -25,7 +25,7 @@ let shapes: [GlassRect] = [
     GlassRect(cx: viewport.width / 2, cy: 44, halfWidth: 230, halfHeight: 26, radius: 26),
 ]
 
-/// Matches Embun's merge distance (merge_k in points).
+/// Container spacing; Embun fits its merge radius (19 pt) to the neck this produces.
 let mergeSpacing: CGFloat = 22
 
 final class SceneState: ObservableObject {

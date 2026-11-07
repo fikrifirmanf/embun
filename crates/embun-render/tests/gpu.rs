@@ -28,7 +28,11 @@ const VIEW: [f32; 2] = [200.0, 100.0];
 
 /// Renders a flat backdrop at scale 1 and returns a pixel reader.
 fn render(gpu: &Gpu, backdrop_color: [u8; 3], shapes: &[GlassShape], params: GlassParams) -> impl Fn(u32, u32) -> [u8; 3] + use<> {
-    let image = backdrops::solid(64, 64, backdrop_color);
+    render_image(gpu, &backdrops::solid(64, 64, backdrop_color), shapes, params)
+}
+
+/// Renders `image` as the backdrop, one texel per pixel, and returns a pixel reader.
+fn render_image(gpu: &Gpu, image: &backdrops::Image, shapes: &[GlassShape], params: GlassParams) -> impl Fn(u32, u32) -> [u8; 3] + use<> {
     let backdrop = gpu.renderer.create_backdrop(&gpu.device, &gpu.queue, &image.rgba, image.width, image.height);
     let frame = Frame { viewport: VIEW, scale_factor: 1.0, backdrop_scale: 1.0, scroll: 0.0, shapes, params };
     let (pixels, width, _) = offscreen::render_rgba(&gpu.device, &gpu.queue, &gpu.renderer, &backdrop, &frame);
@@ -107,6 +111,23 @@ fn close_shapes_merge_only_when_merging_is_on() {
 
 // unslop-ignore TEST_WITHOUT_ASSERTION -- asserts through the assert_near helper
 #[test]
+fn merged_neck_has_no_seam() {
+    let gpu = gpu();
+    // A left-to-right ramp, unblurred, so each pixel shows where its sample came from.
+    let mut image = backdrops::solid(256, 100, [0, 0, 0]);
+    for (i, px) in image.rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+        px[0] = (i % 256) as u8;
+    }
+    let shapes = [circle(100.0, 50.0, 20.0, 0.0), circle(146.0, 50.0, 20.0, 0.0)];
+    let no_frost = GlassLayers { frost: false, fringe: false, ..GlassLayers::default() };
+    let px = render_image(&gpu, &image, &shapes, GlassParams::from_level(0.0, no_frost, false));
+    // The neck's center is x = 123. Two pixels apart, the ramp moves by about
+    // two steps; lensing that flips sides at the center would jump by ~20.
+    let (left, right) = (px(122, 50)[0], px(124, 50)[0]);
+    assert!(left.abs_diff(right) <= 6, "seam at the neck: {left} then {right}");
+}
+
+#[test]
 fn optional_shadow_darkens_the_backdrop_just_below_a_shape() {
     let gpu = gpu();
     let shapes = [circle(100.0, 40.0, 30.0, 0.0)];
@@ -143,6 +164,6 @@ fn non_srgb_targets_like_browser_canvases_get_the_same_colors() {
         wgpu::TextureFormat::Rgba8Unorm,
     );
     let worst = srgb.iter().zip(&unorm).map(|(a, b)| a.abs_diff(*b)).max().unwrap();
-    // The sRGB curve and the shader's 2.2 gamma differ slightly in the darks.
-    assert!(worst <= 8, "largest channel difference was {worst}");
+    // Both paths use the exact sRGB curve; only rounding differs.
+    assert!(worst <= 2, "largest channel difference was {worst}");
 }

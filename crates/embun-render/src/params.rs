@@ -56,6 +56,10 @@ pub struct GlassParams {
     pub outline: [f32; 2],
 }
 
+/// Merge radius in logical pixels. Fitted to the neck macOS draws between two
+/// 56 pt circles 6 pt apart in a `GlassEffectContainer` with spacing 22.
+const MERGE_K: f32 = 19.0;
+
 /// The macOS 27 default position of the glass slider.
 pub const DEFAULT_LEVEL: f32 = 0.5;
 
@@ -101,7 +105,7 @@ impl GlassParams {
             rim: if layers.rim { 1.0 } else { 0.0 },
             fringe: if layers.fringe && !reduce { 1.0 } else { 0.0 },
             shadow: if layers.shadow { 1.0 } else { 0.0 },
-            merge_k: if layers.merge { 22.0 } else { 0.0 },
+            merge_k: if layers.merge { MERGE_K } else { 0.0 },
             outline: [m[9], m[10]],
         }
     }
