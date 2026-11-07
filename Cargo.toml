@@ -12,6 +12,7 @@ version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+repository = "https://github.com/fikrifirmanf/embun"
 keywords = ["wgpu", "glass", "gui", "blur", "shader"]
 categories = ["gui", "rendering", "graphics"]
 
