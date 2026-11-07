@@ -49,7 +49,9 @@ fn draw(
 
 For tests and screenshots, `offscreen::render_rgba` renders a frame and returns its pixels.
 
-Tested on Metal and on WebGPU in Chrome. Vulkan, DirectX 12 and WebGL2 are not tested yet.
+The glass shader runs only in a rectangle around each shape. The rest of the target gets a plain copy of the backdrop, so cost grows with the area the glass covers, not with screen size. The frost blur is computed once and reused until the backdrop changes: after you draw new content into the backdrop texture, call `regenerate_mips`, which also tells the next `render` to blur again.
+
+Tested on Metal, and on WebGPU and WebGL2 in Chrome. Vulkan and DirectX 12 are not tested yet.
 
 Embun is not affiliated with Apple. It uses no Apple code, fonts or symbols.
 

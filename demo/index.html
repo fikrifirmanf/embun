@@ -59,6 +59,7 @@ header { display: grid; gap: 14px; max-width: 70ch; }
 .chip .grp { display: flex; gap: 16px; align-items: center; }
 .chip svg { width: 18px; height: 18px; display: block; }
 .nogl { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #e7e9ee; background: #16181d; }
+.nogl[hidden] { display: none; }
 .stage-note { font-size: 0.875rem; color: var(--muted); }
 
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 18px; }
@@ -205,7 +206,7 @@ pre code { background: none; padding: 0; font-size: inherit; }
         <li>Phase 0 is done for basic shapes. A capture app puts real macOS 27.0.1 glass over our test backdrops at three slider positions, in light and dark. The first 18 captures turned out to show a window without focus, which looks different, so focused windows were captured again. The shader is fitted to both: average error is 0.9–1.8 out of 255 for focused glass and 0.5–1.1 without focus. Corners use Apple's continuous curve, and merged shapes match the macOS neck within a pixel.</li>
         <li>Focused glass at the clear setting is mostly the sharp backdrop, bent near the edge, with a thin highlight along the top and bottom. The slider keeps the same 16 pt blur and changes how much of the sharp backdrop shows through. Light glass lets detail brighter than the frost through about twice as strongly as darker detail; dark glass does the reverse.</li>
         <li><code>embun-motion</code> has springs with SwiftUI-style response and damping settings.</li>
-        <li>21 tests pass. Nine render real frames on the GPU: they check glass colors, the outline, the edge highlight and how detail shows through against the macOS captures, and guard against a seam where shapes merge.</li>
+        <li>22 tests pass. Ten render real frames on the GPU: they check glass colors, the outline, the edge highlight and how detail shows through against the macOS captures, and guard against a seam where shapes merge, and that the frost follows new content.</li>
         <li>Real glass buttons are captured too: small and regular buttons are rounded rectangles with a radius of a quarter of their height, larger ones are capsules.</li>
         <li>Next: tinted glass for prominent buttons, then toolbars, sidebars and menus.</li>
       </ul>
@@ -402,9 +403,9 @@ embun          framework  winit + taffy + parley + accesskit, built on the two a
         <table>
           <thead><tr><th>Tier</th><th>Used on</th><th>What it draws</th></tr></thead>
           <tbody>
-            <tr><td>Full</td><td>Metal, Vulkan, DX12, WebGPU on capable GPUs</td><td>Every layer: frost, lensing, rim light, color fringe, merging</td></tr>
-            <tr><td>Reduced</td><td>WebGL2, low-end mobile GPUs</td><td>Cheaper blur, simpler lensing, no color fringe</td></tr>
-            <tr><td>Opaque</td><td>Reduce Transparency on, or a GPU too slow for Reduced</td><td>A solid tinted surface with a faint rim</td></tr>
+            <tr><td>Full</td><td>Every backend today, including WebGL2</td><td>Every layer: frost, lensing, rim light, color fringe, merging</td></tr>
+            <tr><td>Reduced (planned)</td><td>Low-end mobile GPUs</td><td>Cheaper blur, simpler lensing, no color fringe</td></tr>
+            <tr><td>Opaque</td><td>Reduce Transparency on, passed in by the app</td><td>A solid tinted surface with a faint rim</td></tr>
           </tbody>
         </table>
       </div>
@@ -711,8 +712,8 @@ fn shade_glass(px: vec2f, d: f32, n: vec2f, appearance: f32) -&gt; vec3f {
     const tbW = Math.min(w - 32, 460);
     shapes = [
       { cx: w * 0.32, cy: h * 0.56, hw: Math.min(96, w * 0.22), hh: Math.min(60, h * 0.13), r: 34, el: makeChip('lens', '') },
-      { cx: w - 56 - 84, cy: h - 60, hw: 28, hh: 28, r: 28, el: makeChip('btn', ICON.plus) },
-      { cx: w - 56, cy: h - 60, hw: 28, hh: 28, r: 28, el: makeChip('btn', ICON.heart) },
+      { cx: w - 56 - 84, cy: h - 60, hw: 28, hh: 28, r: 28, el: makeChip('round', ICON.plus) },
+      { cx: w - 56, cy: h - 60, hw: 28, hh: 28, r: 28, el: makeChip('round', ICON.heart) },
       { cx: w / 2, cy: 18 + 26, hw: tbW / 2, hh: 26, r: 26,
         el: makeChip('toolbar', `<span class="grp">${ICON.sidebar}${ICON.back}</span><span data-title></span><span class="grp">${ICON.share}${ICON.search}</span>`) }
     ];

@@ -31,7 +31,8 @@ Real glass buttons are captured too, but not yet toolbars, sidebars or menus.
 |---|---|
 | Metal (macOS) | yes, all tests and captures |
 | WebGPU in Chrome | yes, the demo page |
-| Vulkan, DirectX 12, WebGL2 | not yet |
+| WebGL2 in Chrome | yes, the demo page with WebGPU turned off |
+| Vulkan, DirectX 12 | not yet |
 
 ## Try it
 

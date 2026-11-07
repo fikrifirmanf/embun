@@ -162,6 +162,46 @@ fn clear_glass_keeps_detail_on_its_own_side_of_the_frost_like_macos() {
 }
 
 #[test]
+fn frost_follows_new_backdrop_content_after_regenerate_mips() {
+    // The frost blur is reused between frames, so it must be redone when the
+    // content behind the glass changes.
+    let gpu = gpu();
+    let image = backdrops::solid(200, 100, [20, 20, 20]);
+    let backdrop = gpu.renderer.create_backdrop(&gpu.device, &gpu.queue, &image.rgba, image.width, image.height);
+    let shapes = [circle(100.0, 50.0, 40.0, 0.0)];
+    let draw = || {
+        let frame = Frame {
+            viewport: VIEW,
+            scale_factor: 1.0,
+            backdrop_scale: 1.0,
+            scroll: 0.0,
+            shapes: &shapes,
+            params: GlassParams::from_level(1.0, GlassLayers::default(), false),
+        };
+        let (pixels, width, _) = offscreen::render_rgba(&gpu.device, &gpu.queue, &gpu.renderer, &backdrop, &frame);
+        let i = ((50 * width + 100) * 4) as usize;
+        [pixels[i], pixels[i + 1], pixels[i + 2]]
+    };
+    let over_dark = draw();
+    assert_eq!(draw(), over_dark, "an unchanged backdrop must keep the same frost");
+
+    let bright = backdrops::solid(200, 100, [230, 230, 230]);
+    gpu.queue.write_texture(
+        backdrop.texture().as_image_copy(),
+        &bright.rgba,
+        wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(200 * 4), rows_per_image: Some(100) },
+        wgpu::Extent3d { width: 200, height: 100, depth_or_array_layers: 1 },
+    );
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    gpu.renderer.regenerate_mips(&gpu.device, &mut encoder, &backdrop);
+    gpu.queue.submit([encoder.finish()]);
+
+    // Same glass over a fresh backdrop of the new color.
+    let fresh = render(&gpu, [230, 230, 230], &shapes, GlassParams::from_level(1.0, GlassLayers::default(), false));
+    assert_near(draw(), fresh(100, 50), 1);
+}
+
+#[test]
 fn close_shapes_merge_only_when_merging_is_on() {
     let gpu = gpu();
     // Two circles with a 6 px gap between them, centered on (123, 50).

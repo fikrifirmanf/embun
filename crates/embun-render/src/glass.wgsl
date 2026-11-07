@@ -42,6 +42,29 @@ fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
     return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
 }
 
+// How far outside its box a shape can change pixels: the merge radius (necks
+// between shapes), the outline, and the drop shadow when it is on.
+fn shape_margin() -> f32 {
+    var m = u.merge_k + 4.0 / u.scale_factor;
+    if (u.shadow > 0.0) {
+        m = max(m, 6.0 + 14.0 * 5.0);
+    }
+    return m;
+}
+
+// One rectangle per shape, grown by shape_margin(). The glass shader runs
+// only inside these; the rest of the target keeps the plain backdrop drawn by
+// fs_backdrop. Overlapping rectangles draw the same pixels twice with the
+// same result.
+@vertex
+fn vs_shape(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> @builtin(position) vec4f {
+    let corners = array(vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0), vec2f(0.0, 1.0), vec2f(1.0, 0.0), vec2f(1.0, 1.0));
+    let s = u.shapes[i];
+    let grow = s.zw + vec2f(shape_margin());
+    let p = mix(s.xy - grow, s.xy + grow, corners[v]);
+    return vec4f(p.x / u.viewport.x * 2.0 - 1.0, 1.0 - p.y / u.viewport.y * 2.0, 0.0, 1.0);
+}
+
 fn spow(x: f32, y: f32) -> f32 {
     return pow(max(x, 1e-6), y);
 }
@@ -94,8 +117,7 @@ fn appearance_at(p: vec2f) -> f32 {
     var ws = 0.0;
     for (var i = 0u; i < u.shape_count; i++) {
         let s = u.shapes[i];
-        let di = sd_round_box(p - s.xy, s.zw, u.extra[i].x);
-        let w = exp(-max(di, 0.0) / 16.0);
+        let w = exp(-max(sd_round_box(p - s.xy, s.zw, u.extra[i].x), 0.0) / 16.0);
         a += w * u.extra[i].y;
         ws += w;
     }
@@ -135,11 +157,9 @@ fn finish(c: vec3f) -> vec4f {
     return vec4f(to_linear(c), 1.0);
 }
 
-@fragment
-fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let p = pos.xy / u.scale_factor;
-    let d = scene(p);
-
+// The backdrop as the glass pass shows it outside the shapes, with the
+// optional drop shadow.
+fn backdrop_color(p: vec2f) -> vec3f {
     var bg = to_gamma(backdrop_linear(p, 0.0));
     if (u.shadow > 0.0) {
         let ds = scene(p - vec2f(0.0, 6.0));
@@ -149,6 +169,22 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         }
         bg = bg * (1.0 - sh * 0.22 * u.shadow);
     }
+    return bg;
+}
+
+// Fills the whole target with the backdrop. Kept small so the many pixels
+// away from every shape stay cheap; see vs_shape.
+@fragment
+fn fs_backdrop(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    return finish(to_gamma(backdrop_linear(pos.xy / u.scale_factor, 0.0)));
+}
+
+@fragment
+fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let p = pos.xy / u.scale_factor;
+    let d = scene(p);
+
+    let bg = backdrop_color(p);
 
     // Far outside every shape: just the backdrop.
     if (d * u.scale_factor > 3.0) {

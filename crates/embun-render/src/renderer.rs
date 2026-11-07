@@ -99,6 +99,12 @@ pub struct Backdrop {
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
     blur_levels: Vec<BlurLevel>,
+    /// For each mip level from 1: a bind group reading the level above it and
+    /// a view to draw into it.
+    mip_steps: Vec<(wgpu::BindGroup, wgpu::TextureView)>,
+    /// Mip level and sigma of the blur already in the frost textures, or
+    /// `None` after the content changed. Lets `render` skip the blur.
+    blurred: std::sync::Mutex<Option<(usize, f32)>>,
     size: [u32; 2],
 }
 
@@ -118,6 +124,7 @@ impl Backdrop {
 
 /// Draws glass shapes over a [`Backdrop`] into a target texture.
 pub struct GlassRenderer {
+    backdrop_pipeline: wgpu::RenderPipeline,
     glass_pipeline: wgpu::RenderPipeline,
     blur_pipeline: wgpu::RenderPipeline,
     blur_layout: wgpu::BindGroupLayout,
@@ -166,7 +173,7 @@ impl GlassRenderer {
 
         let uniform_entry = |size: usize| wgpu::BindGroupLayoutEntry {
             binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Uniform,
                 has_dynamic_offset: false,
@@ -188,9 +195,11 @@ impl GlassRenderer {
             entries: &[texture_entry(0), sampler_entry(1)],
         });
 
-        let glass_pipeline = fullscreen_pipeline(device, "embun glass", &glass_shader, &glass_layout, target_format);
-        let mip_pipeline = fullscreen_pipeline(device, "embun mip", &mip_shader, &mip_layout, Backdrop::FORMAT);
-        let blur_pipeline = fullscreen_pipeline(device, "embun blur", &blur_shader, &blur_layout, BLUR_FORMAT);
+        let backdrop_pipeline =
+            pipeline(device, "embun backdrop", &glass_shader, ("vs", "fs_backdrop"), &glass_layout, target_format);
+        let glass_pipeline = pipeline(device, "embun glass", &glass_shader, ("vs_shape", "fs"), &glass_layout, target_format);
+        let mip_pipeline = pipeline(device, "embun mip", &mip_shader, ("vs", "fs"), &mip_layout, Backdrop::FORMAT);
+        let blur_pipeline = pipeline(device, "embun blur", &blur_shader, ("vs", "fs"), &blur_layout, BLUR_FORMAT);
         let blur_buffers = ["embun blur horizontal", "embun blur vertical"].map(|label| {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
@@ -224,6 +233,7 @@ impl GlassRenderer {
         });
 
         Self {
+            backdrop_pipeline,
             glass_pipeline,
             blur_pipeline,
             blur_layout,
@@ -336,45 +346,53 @@ impl GlassRenderer {
             ],
         });
 
-        let backdrop = Backdrop { texture, bind_group, blur_levels, size: [width, height] };
+        let mip_steps = (1..texture.mip_level_count())
+            .map(|level| {
+                let src = level_view(&texture, level - 1);
+                let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("embun mip"),
+                    layout: &self.mip_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&src) },
+                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.mip_sampler) },
+                    ],
+                });
+                (group, level_view(&texture, level))
+            })
+            .collect();
+        let backdrop = Backdrop {
+            texture,
+            bind_group,
+            blur_levels,
+            mip_steps,
+            blurred: std::sync::Mutex::new(None),
+            size: [width, height],
+        };
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("embun mips") });
         self.regenerate_mips(device, &mut encoder, &backdrop);
         queue.submit([encoder.finish()]);
         backdrop
     }
 
-    /// Rebuilds mip levels 1.. from level 0. Call after drawing new content into the backdrop.
-    pub fn regenerate_mips(&self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, backdrop: &Backdrop) {
-        let levels = backdrop.texture.mip_level_count();
-        let level_view = |level| {
-            backdrop.texture.create_view(&wgpu::TextureViewDescriptor {
-                base_mip_level: level,
-                mip_level_count: Some(1),
-                ..Default::default()
-            })
-        };
-        for level in 1..levels {
-            let src = level_view(level - 1);
-            let dst = level_view(level);
-            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("embun mip"),
-                layout: &self.mip_layout,
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&src) },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.mip_sampler) },
-                ],
-            });
-            let mut pass = begin_pass(encoder, "embun mip", &dst);
+    /// Rebuilds mip levels 1.. from level 0. Call after drawing new content
+    /// into the backdrop; it also tells the next [`GlassRenderer::render`] to
+    /// blur the new content for the frost.
+    pub fn regenerate_mips(&self, _device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, backdrop: &Backdrop) {
+        for (group, dst) in &backdrop.mip_steps {
+            let mut pass = begin_pass(encoder, "embun mip", dst);
             pass.set_pipeline(&self.mip_pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_bind_group(0, group, &[]);
             pass.draw(0..3, 0..1);
         }
+        *backdrop.blurred.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Draws the backdrop and the glass shapes into `target`, replacing its contents.
     ///
     /// Uses one set of uniform buffers, so submit the encoder before calling
-    /// `render` again.
+    /// `render` again. The frost blur is kept from the previous call until the
+    /// blur size changes or [`GlassRenderer::regenerate_mips`] reports new
+    /// content, so submit every encoder `render` records into.
     pub fn render(
         &self,
         queue: &wgpu::Queue,
@@ -387,9 +405,13 @@ impl GlassRenderer {
         uniforms.blur_lod = self.blur(queue, encoder, backdrop, frame);
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
         let mut pass = begin_pass(encoder, "embun glass", target);
-        pass.set_pipeline(&self.glass_pipeline);
         pass.set_bind_group(0, &backdrop.bind_group, &[]);
+        pass.set_pipeline(&self.backdrop_pipeline);
         pass.draw(0..3, 0..1);
+        if uniforms.shape_count > 0 {
+            pass.set_pipeline(&self.glass_pipeline);
+            pass.draw(0..6, 0..uniforms.shape_count);
+        }
     }
 
     /// Blurs the backdrop for this frame's frost and returns the mip level the
@@ -403,6 +425,12 @@ impl GlassRenderer {
         let level = ((sigma / MAX_LEVEL_SIGMA).log2().ceil().max(0.0) as usize).min(last);
         let blur = &backdrop.blur_levels[level];
         let level_sigma = sigma / (1u32 << level) as f32;
+        // The frost textures still hold this blur of this content.
+        let mut blurred = backdrop.blurred.lock().unwrap_or_else(|e| e.into_inner());
+        if *blurred == Some((level, level_sigma)) {
+            return level as f32;
+        }
+        *blurred = Some((level, level_sigma));
         let passes = [
             (&blur.horizontal, &blur.half_view, [1.0 / blur.size[0] as f32, 0.0], 1.0),
             (&blur.vertical, &blur.full_view, [0.0, 1.0 / blur.size[1] as f32], 0.0),
@@ -452,10 +480,12 @@ impl GlassRenderer {
     }
 }
 
-fn fullscreen_pipeline(
+/// A pipeline with no vertex buffers that replaces what it draws over.
+fn pipeline(
     device: &wgpu::Device,
     label: &str,
     shader: &wgpu::ShaderModule,
+    (vs, fs): (&str, &str),
     layout: &wgpu::BindGroupLayout,
     format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
@@ -469,13 +499,13 @@ fn fullscreen_pipeline(
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: shader,
-            entry_point: Some("vs"),
+            entry_point: Some(vs),
             buffers: &[],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
-            entry_point: Some("fs"),
+            entry_point: Some(fs),
             targets: &[Some(wgpu::ColorTargetState { format, blend: None, write_mask: wgpu::ColorWrites::ALL })],
             compilation_options: Default::default(),
         }),
