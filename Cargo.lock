@@ -746,7 +746,7 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "embun"
-version = "0.0.2"
+version = "0.1.0"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -764,11 +764,11 @@ dependencies = [
 
 [[package]]
 name = "embun-motion"
-version = "0.0.2"
+version = "0.1.0"
 
 [[package]]
 name = "embun-render"
-version = "0.0.2"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "png",
@@ -778,7 +778,7 @@ dependencies = [
 
 [[package]]
 name = "embun-web"
-version = "0.0.2"
+version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "embun-render",
