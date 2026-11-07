@@ -54,10 +54,11 @@ Each frame has three layers:
 2. **Glass.** Every element marked `.glass()` becomes a glass shape drawn by [`embun-render`](https://crates.io/crates/embun-render) over the content.
 3. **On the glass.** The children of glass elements: labels and icons on buttons, toolbar items, sidebar rows.
 
-Pressing or hovering a glass button only changes the glass layer, so the frost blur is reused and the frame stays cheap. It also reuses the last layout. On an Apple M5, a UI of 5,000 elements takes 0.38 ms to update after a hover change and 3.9 ms for a full layout, which runs after a message, a resize or a scroll. Very long lists are laid out in full; there is no virtualized list yet.
+Pressing or hovering a glass button only changes the glass layer, so the frost blur is reused and the frame stays cheap. It also reuses the last layout. On an Apple M5, a UI of 5,000 elements takes 0.38 ms to update after a hover change and 3.9 ms for a full layout, which runs after a message, a resize or a scroll.
 
 ## What is there
 
+- `list`: a scrolling list that builds and lays out only the rows on screen. A million rows of 32 px scroll at about 0.12 ms per step on an Apple M5.
 - Layout: rows, columns, padding, gap, grow, alignment, wrapping, absolute positioning and vertical scrolling, through [taffy](https://crates.io/crates/taffy).
 - Text in Inter, embedded so it measures the same everywhere. Inter is under the SIL Open Font License; see `fonts/OFL.txt`.
 - Images from RGBA8 pixels, or from PNG and JPEG files and bytes with `Image::open` and `Image::from_bytes`.
@@ -79,6 +80,7 @@ cargo run -p embun --example counter
 cargo run -p embun --example photos
 cargo run -p embun --example controls
 cargo run -p embun --example notes
+cargo run --release -p embun --example list
 cargo run -p embun --example gallery -- out/   # renders PNGs, no window
 ```
 

@@ -31,6 +31,49 @@ pub(crate) struct Node<'a, M> {
 
 const DEFAULT_TEXT: TextStyle = TextStyle { size: 13.0, weight: 400, line_height: 1.25, align: TextAlign::Left };
 
+/// The id the root's children are hashed from.
+pub(crate) const ROOT_ID: u64 = 0x656d_6275_6e00;
+
+/// The id of a child: its parent's id with its key, or its position when it
+/// has none. Ids survive rebuilds as long as the tree keeps its shape.
+pub(crate) fn child_id(parent: u64, key: Option<&str>, index: usize) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    parent.hash(&mut hasher);
+    match key {
+        Some(key) => key.hash(&mut hasher),
+        None => index.hash(&mut hasher),
+    }
+    hasher.finish()
+}
+
+/// Rows a list builds beyond the edges of what is on screen.
+const OVERSCAN: usize = 2;
+
+/// Fills every [`list`](crate::element::list) in the tree with the rows
+/// visible at its scroll offset, between two spacers that stand in for the
+/// rest. `viewport_height` bounds how many rows can be visible at once.
+pub(crate) fn expand_lists<M>(el: &mut Element<M>, id: u64, scroll: &HashMap<u64, f32>, viewport_height: f32) {
+    if let Some(spec) = el.list.clone() {
+        let row = if spec.row_height.is_finite() && spec.row_height >= 1.0 { spec.row_height } else { 1.0 };
+        let total = spec.count as f32 * row;
+        let offset = scroll.get(&id).copied().unwrap_or(0.0).clamp(0.0, (total - viewport_height).max(0.0));
+        let first = ((offset / row).floor() as usize).saturating_sub(OVERSCAN).min(spec.count);
+        let on_screen = (viewport_height / row).ceil() as usize + 1;
+        let last = (first + on_screen + 2 * OVERSCAN).min(spec.count);
+        el.style.gap = 0.0;
+        el.children.clear();
+        el.children.push(crate::element::div().key("list-top").h(first as f32 * row).shrink_0());
+        for i in first..last {
+            el.children.push(crate::element::div().key(format!("list-row-{i}")).h(row).shrink_0().child((spec.build)(i)));
+        }
+        el.children.push(crate::element::div().key("list-bottom").h((spec.count - last) as f32 * row).shrink_0());
+    }
+    for (i, child) in el.children.iter_mut().enumerate() {
+        let child_id = child_id(id, child.key.as_deref(), i);
+        expand_lists(child, child_id, scroll, viewport_height);
+    }
+}
+
 /// Lists the tree in pre-order with ids, inherited text styles and parents.
 pub(crate) fn flatten<'a, M>(root: &'a Element<M>, theme: &Theme) -> Vec<Node<'a, M>> {
     let mut nodes = Vec::new();
@@ -52,7 +95,7 @@ fn visit<'a, M>(el: &'a Element<M>, parent: Option<usize>, index: usize, nodes: 
             };
             (n.text.clone(), n.color, on_glass, n.id, n.in_overlay)
         }
-        None => (DEFAULT_TEXT, theme.label(), None, 0x656d_6275_6e00, false),
+        None => (DEFAULT_TEXT, theme.label(), None, ROOT_ID, false),
     };
     let s = &el.style;
     let text = TextStyle {
@@ -61,16 +104,10 @@ fn visit<'a, M>(el: &'a Element<M>, parent: Option<usize>, index: usize, nodes: 
         line_height: s.line_height.unwrap_or(text.line_height),
         align: s.text_align.unwrap_or(text.align),
     };
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    parent_id.hash(&mut hasher);
-    match &el.key {
-        Some(key) => key.hash(&mut hasher),
-        None => index.hash(&mut hasher),
-    }
     let me = nodes.len();
     nodes.push(Node {
         el,
-        id: hasher.finish(),
+        id: child_id(parent_id, el.key.as_deref(), index),
         parent,
         children: Vec::new(),
         text,

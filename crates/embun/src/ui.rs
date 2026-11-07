@@ -235,8 +235,11 @@ impl<A: App> Ui<A> {
             return false;
         }
         self.dirty = false;
-        if self.view.is_none() {
-            self.view = Some(self.app.view(&self.theme));
+        let fresh = self.view.is_none();
+        self.ensure_view();
+        if !fresh && self.layout_cache.is_none() {
+            // Scrolling and resizing change which list rows are on screen.
+            self.expand_lists();
         }
         let view = self.view.as_ref().expect("view");
         let mut nodes = layout::flatten(view, &self.theme);
@@ -446,6 +449,16 @@ impl<A: App> Ui<A> {
     fn ensure_view(&mut self) {
         if self.view.is_none() {
             self.view = Some(self.app.view(&self.theme));
+            self.expand_lists();
+        }
+    }
+
+    /// Builds the rows of every list that are visible at its scroll offset.
+    fn expand_lists(&mut self) {
+        let height = self.viewport[1];
+        if let Some(view) = self.view.as_mut() {
+            let root = layout::child_id(layout::ROOT_ID, view.key.as_deref(), 0);
+            layout::expand_lists(view, root, &self.scroll, height);
         }
     }
 
@@ -1728,5 +1741,104 @@ mod tests {
         let node = tree.nodes.iter().find(|(_, n)| n.role() == R::MultilineTextInput).expect("a multiline input");
         assert_eq!(node.1.value(), Some("a\nb"));
         assert!(tree.nodes.iter().all(|(_, n)| n.role() != R::TextInput));
+    }
+
+    struct Rows {
+        count: usize,
+        row_height: f32,
+        pressed: Option<usize>,
+        built: std::rc::Rc<std::cell::Cell<usize>>,
+    }
+
+    impl App for Rows {
+        type Message = usize;
+        fn update(&mut self, i: usize) {
+            // usize::MAX is the "delete almost everything" message.
+            if i == usize::MAX {
+                self.count = 5;
+            } else {
+                self.pressed = Some(i);
+            }
+        }
+        fn view(&self, _: &Theme) -> Element<usize> {
+            let built = self.built.clone();
+            crate::list(self.count, self.row_height, move |i| {
+                built.set(built.get() + 1);
+                crate::row().key(format!("item{i}")).h_full().px_2().items_center().child(text(format!("Row {i}"))).on_press(i)
+            })
+            .key("rows")
+            .h_full()
+        }
+    }
+
+    fn rows(count: usize) -> (Ui<Rows>, std::rc::Rc<std::cell::Cell<usize>>) {
+        let built = std::rc::Rc::new(std::cell::Cell::new(0));
+        let app = Rows { count, row_height: 20.0, pressed: None, built: built.clone() };
+        (Ui::new(app, Theme::default(), [300.0, 200.0]), built)
+    }
+
+    #[test]
+    fn a_hundred_thousand_rows_build_only_the_visible_ones() {
+        let (mut ui, built) = rows(100_000);
+        ui.update();
+        // 200 px of 20 px rows is 10, plus a few beyond each edge.
+        assert!(built.get() < 20, "built {} rows", built.get());
+        assert!(ui.rect_of_key("item0").is_some() && ui.rect_of_key("item5").is_some());
+        assert!(ui.rect_of_key("item50").is_none(), "rows far below are not built");
+        assert!(ui.scene().foreground.len() + ui.scene().content.len() < 60, "a handful of primitives, not a hundred thousand");
+    }
+
+    #[test]
+    fn scrolling_brings_later_rows_into_place_at_their_exact_positions() {
+        let (mut ui, built) = rows(100_000);
+        ui.update();
+        ui.pointer_moved([100.0, 100.0]);
+        ui.scrolled(1000.0);
+        let r = ui.rect_of_key("item50").expect("row 50 is built after scrolling to it");
+        assert_eq!(r[1], 50.0 * 20.0 - 1000.0, "row 50 sits at its place in the whole list, minus the scroll");
+        assert_eq!(r[3], 20.0);
+        assert!(ui.rect_of_key("item0").is_none(), "rows above are dropped");
+        assert!(built.get() < 80, "only the visible rows were built in total: {}", built.get());
+    }
+
+    #[test]
+    fn the_end_of_the_list_stops_scrolling_with_its_last_row_at_the_bottom() {
+        let (mut ui, _) = rows(30);
+        ui.update();
+        ui.pointer_moved([100.0, 100.0]);
+        ui.scrolled(1_000_000.0);
+        let last = ui.rect_of_key("item29").expect("last row");
+        assert_eq!(last[1] + last[3], 200.0, "the last row ends at the bottom of the window");
+        assert!(ui.rect_of_key("item15").is_none() || ui.rect_of_key("item15").is_some_and(|r| r[1] < 0.0));
+    }
+
+    #[test]
+    fn pressing_a_row_after_scrolling_sends_that_rows_index() {
+        let (mut ui, _) = rows(1000);
+        ui.update();
+        ui.pointer_moved([100.0, 100.0]);
+        ui.scrolled(2000.0);
+        let r = ui.rect_of_key("item100").expect("row 100");
+        ui.pointer_moved([r[0] + 20.0, r[1] + 10.0]);
+        ui.pointer_pressed();
+        ui.pointer_released();
+        assert_eq!(ui.app().pressed, Some(100));
+    }
+
+    #[test]
+    fn a_list_that_shrinks_or_has_odd_sizes_does_not_break() {
+        let (mut ui, _) = rows(1000);
+        ui.update();
+        ui.pointer_moved([100.0, 100.0]);
+        ui.scrolled(15_000.0);
+        // The app now has only 5 rows while the list is scrolled far past them.
+        ui.send(usize::MAX);
+        assert!(ui.rect_of_key("item4").is_some(), "the remaining rows show");
+        for (count, height) in [(0, 20.0), (10, 0.0), (10, f32::NAN), (10, f32::INFINITY), (10, -5.0)] {
+            let mut ui = Ui::new(Rows { count, row_height: height, pressed: None, built: Default::default() }, Theme::default(), [300.0, 200.0]);
+            ui.update();
+            ui.scrolled(100.0);
+            ui.update();
+        }
     }
 }

@@ -25,6 +25,15 @@ pub struct Element<M> {
     pub(crate) checked: Option<bool>,
     /// A slider's current position, 0 to 1.
     pub(crate) value: Option<f32>,
+    /// For lists: builds rows on demand; see [`list`].
+    pub(crate) list: Option<std::rc::Rc<ListSpec<M>>>,
+}
+
+/// The rows of a [`list`] and how to build one.
+pub(crate) struct ListSpec<M> {
+    pub count: usize,
+    pub row_height: f32,
+    pub build: Box<dyn Fn(usize) -> Element<M>>,
 }
 
 /// Width of a slider's thumb. The thumb's center moves over the slider's
@@ -210,7 +219,7 @@ impl std::fmt::Display for ImageError {
 impl std::error::Error for ImageError {}
 
 fn node<M>(kind: Kind) -> Element<M> {
-    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None, on_drag: None, checked: None, value: None }
+    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None, on_drag: None, checked: None, value: None, list: None }
 }
 
 /// A single-line text field. It shows `value`; when the user edits it,
@@ -242,6 +251,21 @@ pub fn text_area<M: 'static>(value: impl Into<String>, on_change: impl Fn(String
     e.style.width = Length::Px(240.0);
     e.style.height = Length::Px(96.0);
     e.style.padding = [6.0, 8.0, 6.0, 8.0];
+    e
+}
+
+/// A vertically scrolling list of `count` rows, each `row_height` logical
+/// pixels tall, that builds and lays out only the rows on screen.
+/// `row(index)` is called for those rows each time the view changes or the
+/// list scrolls, so keep it cheap and make it depend only on `index` and your
+/// app's state. Give the list a height with `h`, `h_full` or `grow`.
+///
+/// The list ignores `gap`; put spacing inside the rows. Heights are exact to
+/// a pixel up to about a million rows of 16 px.
+pub fn list<M: 'static>(count: usize, row_height: f32, row: impl Fn(usize) -> Element<M> + 'static) -> Element<M> {
+    let mut e = node(Kind::Div);
+    e.style.scroll_y = true;
+    e.list = Some(std::rc::Rc::new(ListSpec { count, row_height, build: Box::new(row) }));
     e
 }
 
