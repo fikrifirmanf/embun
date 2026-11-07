@@ -203,6 +203,29 @@ pub fn popover<M>(dismiss: M, content: impl Into<Element<M>>) -> Element<M> {
     div().overlay().inset(0.0).on_press(dismiss).role(Role::Generic).label("Dismiss").child(content)
 }
 
+/// A modal dialog: dims the window and centers `content`, usually a
+/// [`dialog_panel`]. Clicking the dim area, or pressing Escape, sends
+/// `dismiss`; your `update` should then stop showing it.
+pub fn dialog<M>(dismiss: M, content: impl Into<Element<M>>) -> Element<M> {
+    div()
+        .overlay()
+        .inset(0.0)
+        .bg(Color::rgba(0, 0, 0, 0.28))
+        .items_center()
+        .justify_center()
+        .on_press(dismiss)
+        .role(Role::Generic)
+        .label("Dismiss")
+        .child(content)
+}
+
+/// The surface of a [`dialog`]: a solid rounded panel 300 px wide with room
+/// for a title, a message and buttons. It is solid, not glass, so glass
+/// buttons on it have something to frost.
+pub fn dialog_panel<M>(theme: &Theme) -> Element<M> {
+    div().w(300.0).p_5().gap_3().rounded(24.0).bg(theme.surface()).border(1.0, theme.separator()).capture_presses()
+}
+
 /// A glass menu panel: a column of [`menu_item`]s.
 pub fn menu<M>() -> Element<M> {
     div().min_w(180.0).p_1().gap_0().rounded(12.0).glass().role(Role::Menu)
@@ -275,6 +298,30 @@ pub fn checkbox<M>(theme: &Theme, label: impl Into<String>, checked: bool, messa
         .on_press(message)
         .role(Role::Checkbox)
         .checked(checked)
+        .label(label)
+}
+
+/// A radio button with a text label, for choosing one of several options.
+/// Pressing it sends `message`; your `update` should select that option and
+/// pass `selected` accordingly. Radio buttons in one group are not linked by
+/// the toolkit: you decide which one is selected.
+pub fn radio<M>(theme: &Theme, label: impl Into<String>, selected: bool, message: M) -> Element<M> {
+    let label = label.into();
+    let mut dot = div().size(16.0, 16.0).shrink_0().rounded_full().items_center().justify_center();
+    dot = if selected {
+        dot.bg(theme.accent()).child(div().size(6.0, 6.0).rounded_full().bg(Color::WHITE))
+    } else {
+        dot.bg(Color::rgba(128, 128, 128, 0.12)).border(1.0, Color::rgba(128, 128, 128, 0.55))
+    };
+    row()
+        .items_center()
+        .gap_2()
+        .h(22.0)
+        .child(dot)
+        .child(text(label.clone()).text_size(13.0))
+        .on_press(message)
+        .role(Role::Radio)
+        .checked(selected)
         .label(label)
 }
 

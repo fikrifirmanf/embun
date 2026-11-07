@@ -762,6 +762,7 @@ dependencies = [
  "embun-render",
  "glyphon",
  "image",
+ "objc2-app-kit 0.3.2",
  "png",
  "pollster",
  "taffy",

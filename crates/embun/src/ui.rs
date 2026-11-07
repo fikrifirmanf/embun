@@ -117,6 +117,9 @@ struct Target {
 /// How far an arrow key, or a screen reader's increment, moves a slider.
 const SLIDER_STEP: f32 = 0.05;
 
+/// How a switch knob slides.
+const TOGGLE: Spring = Spring { response: 0.28, damping_fraction: 0.75 };
+
 const PRESS: Spring = Spring { response: 0.2, damping_fraction: 0.8 };
 const HOVER: Spring = Spring { response: 0.25, damping_fraction: 1.0 };
 
@@ -139,6 +142,14 @@ pub struct Ui<A: App> {
     pressed: Option<u64>,
     /// The slider being dragged.
     dragging: Option<u64>,
+    /// The text field whose selection is being dragged out.
+    selecting: Option<u64>,
+    /// How far each text area is scrolled down, in logical pixels.
+    field_scroll: HashMap<u64, f32>,
+    /// Slide progress of each switch's knob, 0 for off and 1 for on.
+    toggles: HashMap<u64, Animated>,
+    /// The field and cursor the caret was last scrolled into view for.
+    last_caret: Option<(u64, usize)>,
     focused: Option<u64>,
     edit: Option<Edit>,
     /// Rects and clips from the last layout, in pre-order. Hover, press,
@@ -174,6 +185,10 @@ impl<A: App> Ui<A> {
             hovered: None,
             pressed: None,
             dragging: None,
+            selecting: None,
+            field_scroll: HashMap::new(),
+            toggles: HashMap::new(),
+            last_caret: None,
             focused: None,
             edit: None,
             layout_cache: None,
@@ -256,6 +271,22 @@ impl<A: App> Ui<A> {
             }
         }
 
+        // Slide each switch's knob between its two ends.
+        for i in 0..nodes.len() {
+            let Some(on) = (nodes[i].el.role == Role::Switch).then_some(nodes[i].el.checked).flatten() else { continue };
+            let want = if on { 1.0 } else { 0.0 };
+            let anim = self.toggles.entry(nodes[i].id).or_insert_with(|| Animated::new(want, TOGGLE));
+            if anim.target != want {
+                anim.target = want;
+                self.dirty = true;
+            }
+            let Some(&knob) = nodes[i].children.first() else { continue };
+            let (track, size) = (nodes[i].rect, nodes[knob].rect[2]);
+            let [_, right, _, left] = nodes[i].el.style.padding;
+            let (from, to) = (track[0] + left, track[0] + track[2] - right - size);
+            nodes[knob].rect[0] = from + (to - from) * anim.value;
+        }
+
         self.targets.clear();
         self.messages.clear();
         self.dismiss = None;
@@ -270,14 +301,14 @@ impl<A: App> Ui<A> {
             }
             let press = if let Some(m) = &n.el.on_press {
                 self.messages.insert(n.id, m.clone());
-                if matches!(n.el.role, Role::Button | Role::MenuItem | Role::Switch | Role::Checkbox | Role::Tab) {
+                if matches!(n.el.role, Role::Button | Role::MenuItem | Role::Switch | Role::Checkbox | Role::Radio | Role::Tab) {
                     self.focus_order.push(n.id);
                 }
                 if n.el.style.overlay {
                     self.dismiss = Some(n.id);
                 }
                 Some(n.id)
-            } else if n.el.style.glass.is_some() {
+            } else if n.el.style.glass.is_some() || n.el.style.capture {
                 // A click on a glass panel's empty space stays on the panel
                 // instead of reaching whatever is behind it.
                 None
@@ -318,6 +349,8 @@ impl<A: App> Ui<A> {
             self.edit = None;
         }
         self.scroll.retain(|id, _| alive.contains(id));
+        self.field_scroll.retain(|id, _| alive.contains(id));
+        self.toggles.retain(|id, _| alive.contains(id));
 
         let highlight: HashMap<u64, Highlight> =
             self.highlight.iter().map(|(&id, (press, hover))| (id, Highlight { press: press.value, hover: hover.value })).collect();
@@ -333,11 +366,23 @@ impl<A: App> Ui<A> {
             let [pad_top, pad_right, pad_bottom, pad_left] = node.el.style.padding;
             let (inner_w, inner_h) = (node.rect[2] - pad_left - pad_right, node.rect[3] - pad_top - pad_bottom);
             let line = node.text.size * node.text.line_height;
-            // Shift the text so the caret stays inside the field.
-            let scroll = if *multiline { [0.0, (pos[1] + line - inner_h).max(0.0)] } else { [(pos[0] - inner_w + 2.0).max(0.0), 0.0] };
+            // Shift the text so the caret stays inside the field. A text area keeps
+            // its own scroll, moved by the wheel, and follows the caret only when it moves.
+            let scroll = if *multiline {
+                let mut y = self.field_scroll.get(&edit.id).copied().unwrap_or(0.0);
+                if self.last_caret != Some((edit.id, cursor)) {
+                    y = y.clamp(pos[1] + line - inner_h, pos[1]);
+                }
+                y = y.clamp(0.0, (self.text.measure(value, &node.text, wrap)[1] - inner_h).max(0.0));
+                self.field_scroll.insert(edit.id, y);
+                [0.0, y]
+            } else {
+                [(pos[0] - inner_w + 2.0).max(0.0), 0.0]
+            };
+            self.last_caret = Some((edit.id, cursor));
             Some(scene::Caret { id: edit.id, pos, selection, scroll })
         });
-        self.scene = scene::build(&nodes, &self.theme, &highlight, self.focused, caret.as_ref());
+        self.scene = scene::build_with(&nodes, &self.theme, &highlight, self.focused, caret.as_ref(), &self.field_scroll);
         true
     }
 
@@ -594,11 +639,19 @@ impl<A: App> Ui<A> {
         let view = self.view.as_ref().expect("view");
         let nodes = layout::flatten(view, &self.theme);
         let Some(node) = nodes.iter().find(|n| n.id == id) else { return value.len() };
-        let (origin, wrap) = layout::field_geometry(rect, &node.el.style, &node.text, multiline, self.scene.caret_scroll(id));
+        let (origin, wrap) = layout::field_geometry(rect, &node.el.style, &node.text, multiline, self.scroll_of(id));
         let style = node.text.clone();
         // A single line is one row, wherever in it the click lands.
         let y = if multiline { p[1] - origin[1] } else { style.size * style.line_height / 2.0 };
         self.text.hit(&value, &style, wrap, [p[0] - origin[0], y])
+    }
+
+    /// How far field `id` is scrolled: sideways for a line, down for a text area.
+    fn scroll_of(&self, id: u64) -> [f32; 2] {
+        match &self.scene.caret {
+            Some(c) if c.id == id => c.scroll,
+            _ => [0.0, self.field_scroll.get(&id).copied().unwrap_or(0.0)],
+        }
     }
 
     /// How the text of field `id` is set and wrapped.
@@ -626,7 +679,12 @@ impl<A: App> Ui<A> {
 
     /// Advances animations by `dt` seconds. Returns true while any is moving.
     pub fn tick(&mut self, dt: f32) -> bool {
+        // A message may have changed what the springs should chase.
+        self.update();
         let mut moving = false;
+        for anim in self.toggles.values_mut() {
+            moving |= anim.step(dt);
+        }
         for (press, hover) in self.highlight.values_mut() {
             moving |= press.step(dt);
             moving |= hover.step(dt);
@@ -702,6 +760,15 @@ impl<A: App> Ui<A> {
         if let Some(id) = self.dragging {
             self.drag_to(id, p[0]);
         }
+        if let Some(id) = self.selecting
+            && let Some(edit) = self.edit.filter(|e| e.id == id)
+        {
+            let cursor = self.offset_at(id, p);
+            if cursor != edit.cursor {
+                self.edit = Some(Edit { cursor, ..edit });
+                self.dirty = true;
+            }
+        }
         let hovered = self.hit(p).and_then(|t| t.press);
         if hovered != self.hovered {
             if let Some(old) = self.hovered {
@@ -738,6 +805,7 @@ impl<A: App> Ui<A> {
             }
             let offset = self.offset_at(id, p);
             self.edit = Some(Edit { id, cursor: offset, anchor: offset });
+            self.selecting = Some(id);
             self.dirty = true;
             return;
         }
@@ -758,6 +826,7 @@ impl<A: App> Ui<A> {
     /// Releasing over the control that was pressed activates it.
     pub fn pointer_released(&mut self) {
         self.update();
+        self.selecting = None;
         if self.dragging.take().is_some() {
             return;
         }
@@ -774,7 +843,11 @@ impl<A: App> Ui<A> {
     pub fn scrolled(&mut self, delta: f32) {
         self.update();
         let Some(p) = self.pointer else { return };
-        let Some(id) = self.hit(p).and_then(|t| t.scroll) else { return };
+        let hit = self.hit(p).cloned();
+        if let Some(t) = hit.as_ref().filter(|t| t.input) && self.scroll_field(t.id, t.rect, delta) {
+            return;
+        }
+        let Some(id) = hit.and_then(|t| t.scroll) else { return };
         let max = self.scroll_info.get(&id).map_or(0.0, |s| s.max);
         let offset = self.scroll.entry(id).or_insert(0.0);
         let next = (*offset + delta).clamp(0.0, max);
@@ -783,6 +856,25 @@ impl<A: App> Ui<A> {
             self.layout_cache = None;
             self.dirty = true;
         }
+    }
+
+    /// Scrolls text area `id` by `delta`; false if it is not a text area or
+    /// cannot scroll that way, so the wheel can reach the container behind it.
+    fn scroll_field(&mut self, id: u64, rect: Rect4, delta: f32) -> bool {
+        self.ensure_view();
+        let Some((value, _, true)) = self.input(id) else { return false };
+        let Some((style, wrap)) = self.field_text(id) else { return false };
+        let Some(node_padding) = self.view.as_ref().and_then(|v| layout::flatten(v, &self.theme).into_iter().find(|n| n.id == id).map(|n| n.el.style.padding)) else { return false };
+        let inner_h = rect[3] - node_padding[0] - node_padding[2];
+        let max = (self.text.measure(&value, &style, wrap)[1] - inner_h).max(0.0);
+        let current = self.field_scroll.get(&id).copied().unwrap_or(0.0);
+        let next = (current + delta).clamp(0.0, max);
+        if next == current {
+            return false;
+        }
+        self.field_scroll.insert(id, next);
+        self.dirty = true;
+        true
     }
 
     pub fn key(&mut self, key: Key) {
@@ -956,6 +1048,7 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
                 Role::MenuItem => R::MenuItem,
                 Role::Switch => R::Switch,
                 Role::Checkbox => R::CheckBox,
+                Role::Radio => R::RadioButton,
                 Role::Tab => R::Tab,
                 Role::TabList => R::TabList,
                 Role::Slider => R::Slider,
@@ -974,7 +1067,7 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
         children: Vec::new(),
         clickable: el.on_press.is_some(),
         focusable: el.on_press.is_some() || el.on_input.is_some() || el.on_drag.is_some(),
-        toggled: matches!(el.role, Role::Switch | Role::Checkbox).then_some(el.checked).flatten(),
+        toggled: matches!(el.role, Role::Switch | Role::Checkbox | Role::Radio).then_some(el.checked).flatten(),
         selected: (el.role == Role::Tab).then_some(el.checked).flatten(),
         numeric: el.on_drag.as_ref().and(el.value),
     }
@@ -1840,5 +1933,215 @@ mod tests {
             ui.scrolled(100.0);
             ui.update();
         }
+    }
+
+    /// A notes field tall enough for about 4 lines, holding 12.
+    fn tall_notes() -> Ui<Notes> {
+        let text = (0..12).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let mut ui = Ui::new(Notes { text }, Theme::default(), [300.0, 200.0]);
+        ui.update();
+        ui
+    }
+
+    #[test]
+    fn dragging_across_a_field_selects_text() {
+        let mut ui = form("hello world");
+        let field = ui.rect_of_key("name").expect("field");
+        let y = field[1] + field[3] / 2.0;
+        ui.pointer_moved([field[0] + 9.0, y]);
+        ui.pointer_pressed();
+        ui.pointer_moved([field[0] + 200.0, y]);
+        ui.pointer_released();
+        assert_eq!(ui.selected_text().as_deref(), Some("hello world"));
+        // Dragging backwards selects the other way, and stops following after release.
+        ui.pointer_moved([field[0] + 9.0, y]);
+        ui.pointer_pressed();
+        ui.pointer_moved([field[0] + 40.0, y]);
+        ui.pointer_released();
+        let selected = ui.selected_text().expect("a selection");
+        assert!(selected.len() > 1 && "hello world".starts_with(&selected) && selected.len() < 11, "{selected:?}");
+        ui.pointer_moved([field[0] + 200.0, y]);
+        assert_eq!(ui.selected_text().as_deref(), Some(selected.as_str()), "moving after release does not extend it");
+    }
+
+    #[test]
+    fn dragging_down_a_text_area_selects_whole_lines() {
+        let mut ui = notes("abc\ndef\nghi");
+        let field = ui.rect_of_key("notes").expect("field");
+        ui.pointer_moved([field[0] + 9.0, field[1] + 8.0]);
+        ui.pointer_pressed();
+        ui.pointer_moved([field[0] + 190.0, field[1] + 60.0]);
+        ui.pointer_released();
+        assert_eq!(ui.selected_text().as_deref(), Some("abc\ndef\nghi"));
+    }
+
+    #[test]
+    fn the_wheel_scrolls_a_text_area_and_the_caret_scrolls_it_back_when_it_moves() {
+        let mut ui = tall_notes();
+        let field = ui.rect_of_key("notes").expect("field");
+        ui.pointer_moved([field[0] + 50.0, field[1] + 40.0]);
+        let first_line_y = |ui: &mut Ui<Notes>| {
+            ui.scene().content.iter().find_map(|p| match p {
+                crate::scene::Prim::Text { origin, .. } => Some(origin[1]),
+                _ => None,
+            })
+        };
+        let top = first_line_y(&mut ui).expect("text");
+        ui.scrolled(30.0);
+        assert_eq!(first_line_y(&mut ui), Some(top - 30.0), "text moves up by the wheel delta");
+        ui.scrolled(-1000.0);
+        assert_eq!(first_line_y(&mut ui), Some(top), "it stops at the top");
+        ui.scrolled(100_000.0);
+        let bottom = first_line_y(&mut ui).expect("text");
+        assert!(bottom < top - 100.0, "it scrolled a long way");
+        let again = {
+            ui.scrolled(100_000.0);
+            first_line_y(&mut ui).expect("text")
+        };
+        assert_eq!(again, bottom, "and stops at the bottom");
+        // Focusing puts the caret at the end; moving it to the start scrolls back to show it.
+        ui.key(Key::Tab);
+        ui.key(Key::DocStart);
+        assert_eq!(first_line_y(&mut ui), Some(top));
+    }
+
+    #[test]
+    fn a_text_area_at_its_scroll_limit_passes_the_wheel_to_the_page_behind_it() {
+        // A short text area that cannot scroll, inside a page that can.
+        struct Page;
+        impl App for Page {
+            type Message = String;
+            fn update(&mut self, _: String) {}
+            fn view(&self, _: &Theme) -> Element<String> {
+                column().scroll_y().child(crate::text_area("short", |t| t).key("area").w(200.0).h(96.0)).child(div().h(800.0))
+            }
+        }
+        let mut ui = Ui::new(Page, Theme::default(), [300.0, 200.0]);
+        let before = ui.rect_of_key("area").expect("area");
+        ui.pointer_moved([before[0] + 20.0, before[1] + 20.0]);
+        ui.scrolled(50.0);
+        let after = ui.rect_of_key("area").expect("area");
+        assert_eq!(after[1], before[1] - 50.0, "the page scrolled");
+    }
+
+    #[test]
+    fn a_switch_knob_slides_to_the_other_end_instead_of_jumping() {
+        let mut ui = settings();
+        let track = ui.rect_of_key("wifi").expect("switch");
+        let knob_x = |ui: &mut Ui<Settings>| {
+            ui.scene()
+                .content
+                .iter()
+                .find_map(|p| match p {
+                    crate::scene::Prim::Rect { rect, .. } if rect[2] == 18.0 && rect[3] == 18.0 => Some(rect[0]),
+                    _ => None,
+                })
+                .expect("the knob")
+        };
+        let (off, on) = (track[0] + 2.0, track[0] + 38.0 - 2.0 - 18.0);
+        assert_eq!(knob_x(&mut ui), off, "starts at the off end without animating in");
+        let at = middle(&mut ui, "wifi");
+        tap(&mut ui, at);
+        assert!(ui.app().wifi);
+        assert!(ui.tick(1.0 / 60.0), "the knob is moving");
+        let early = knob_x(&mut ui);
+        assert!(early > off && early < on, "mid-slide: {early} between {off} and {on}");
+        let mut frames = 0;
+        while ui.tick(1.0 / 60.0) {
+            frames += 1;
+            assert!(frames < 120, "it settles within two seconds");
+        }
+        assert!((knob_x(&mut ui) - on).abs() < 0.01, "ends at the on end: {}", knob_x(&mut ui));
+        assert!(!ui.tick(1.0 / 60.0), "and stays put");
+    }
+
+    struct Choices {
+        size: usize,
+        open: bool,
+        discarded: bool,
+    }
+
+    #[derive(Clone)]
+    enum ChoiceMsg {
+        Size(usize),
+        Close,
+        Discard,
+    }
+
+    impl App for Choices {
+        type Message = ChoiceMsg;
+        fn update(&mut self, m: ChoiceMsg) {
+            match m {
+                ChoiceMsg::Size(i) => self.size = i,
+                ChoiceMsg::Close => self.open = false,
+                ChoiceMsg::Discard => {
+                    self.discarded = true;
+                    self.open = false;
+                }
+            }
+        }
+        fn view(&self, theme: &Theme) -> Element<ChoiceMsg> {
+            use crate::widgets::{dialog, dialog_panel, radio};
+            let mut window = column().p_4().gap_2();
+            for i in 0..3 {
+                window = window.child(radio(theme, format!("Option {i}"), self.size == i, ChoiceMsg::Size(i)).key(format!("opt{i}")));
+            }
+            let window = div().child(window);
+            if self.open {
+                let panel = dialog_panel(theme).key("panel").h(100.0).child(div().key("discard").h(30.0).on_press(ChoiceMsg::Discard));
+                return window.child(dialog(ChoiceMsg::Close, panel));
+            }
+            window
+        }
+    }
+
+    fn choices(open: bool) -> Ui<Choices> {
+        Ui::new(Choices { size: 0, open, discarded: false }, Theme::default(), [400.0, 300.0])
+    }
+
+    #[test]
+    fn radio_buttons_select_and_tell_screen_readers_which_is_selected() {
+        use accesskit::{Role as R, Toggled};
+        let mut ui = choices(false);
+        let r = ui.rect_of_key("opt2").expect("radio");
+        ui.pointer_moved([r[0] + 5.0, r[1] + 5.0]);
+        ui.pointer_pressed();
+        ui.pointer_released();
+        assert_eq!(ui.app().size, 2);
+        let tree = ui.accessibility(1.0);
+        let states: Vec<_> = tree.nodes.iter().filter(|(_, n)| n.role() == R::RadioButton).map(|(_, n)| n.toggled()).collect();
+        assert_eq!(states, [Some(Toggled::False), Some(Toggled::False), Some(Toggled::True)]);
+        // Tab reaches each radio button.
+        ui.key(Key::Tab);
+        ui.key(Key::Tab);
+        ui.key(Key::Activate);
+        assert_eq!(ui.app().size, 1);
+    }
+
+    #[test]
+    fn a_dialog_closes_from_the_dim_area_or_escape_but_not_from_its_panel() {
+        let mut ui = choices(true);
+        let panel = ui.rect_of_key("panel").expect("panel");
+        // The panel's empty space does nothing; its own button works.
+        ui.pointer_moved([panel[0] + 5.0, panel[1] + panel[3] - 5.0]);
+        ui.pointer_pressed();
+        ui.pointer_released();
+        assert!(ui.app().open, "pressing the panel must not dismiss the dialog");
+        let button = ui.rect_of_key("discard").expect("button");
+        ui.pointer_moved([button[0] + 5.0, button[1] + 5.0]);
+        ui.pointer_pressed();
+        ui.pointer_released();
+        assert!(ui.app().discarded && !ui.app().open);
+        // Outside the panel, on the dim area.
+        let mut ui = choices(true);
+        ui.pointer_moved([5.0, 5.0]);
+        ui.pointer_pressed();
+        ui.pointer_released();
+        assert!(!ui.app().open && !ui.app().discarded);
+        // And Escape.
+        let mut ui = choices(true);
+        ui.update();
+        ui.key(Key::Escape);
+        assert!(!ui.app().open);
     }
 }

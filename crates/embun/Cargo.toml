@@ -23,5 +23,8 @@ accesskit.workspace = true
 accesskit_winit.workspace = true
 image.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit.workspace = true
+
 [dev-dependencies]
 png.workspace = true

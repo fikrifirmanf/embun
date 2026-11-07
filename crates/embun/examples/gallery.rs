@@ -35,9 +35,23 @@ fn main() {
     }
     for (name, appearance) in [("light", Appearance::Light), ("dark", Appearance::Dark)] {
         let theme = Theme { appearance, ..Theme::default() };
-        let mut ui = Ui::new(support::controls::Controls::new(), theme, [640.0, 460.0]);
+        let mut ui = Ui::new(support::controls::Controls::new(), theme, [640.0, 520.0]);
         let (pixels, width, height) = snapshot(&mut ui, &mut renderer, &device, &queue, 2.0);
         let path = format!("{out}/controls-{name}.png");
+        let file = std::fs::File::create(&path).expect("create png");
+        let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header().expect("png header").write_image_data(&pixels).expect("png data");
+        println!("wrote {path} ({width}x{height})");
+    }
+    for (name, appearance) in [("light", Appearance::Light), ("dark", Appearance::Dark)] {
+        let theme = Theme { appearance, ..Theme::default() };
+        let mut controls = support::controls::Controls::new();
+        controls.dialog = name == "light";
+        let mut ui = Ui::new(controls, theme, [640.0, 520.0]);
+        let (pixels, width, height) = snapshot(&mut ui, &mut renderer, &device, &queue, 2.0);
+        let path = format!("{out}/dialog-{name}.png");
         let file = std::fs::File::create(&path).expect("create png");
         let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
         encoder.set_color(png::ColorType::Rgba);

@@ -23,6 +23,7 @@ wgpu = "30.0.1"
 bytemuck = { version = "1.25", features = ["derive"] }
 pollster = "1.0"
 png = "0.18"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 winit = "0.30.13"
 taffy = "0.15.1"

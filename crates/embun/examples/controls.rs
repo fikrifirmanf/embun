@@ -6,5 +6,5 @@
 mod support;
 
 fn main() -> Result<(), embun::RunError> {
-    embun::run(support::controls::Controls::new(), embun::Settings::new("Controls").size(640.0, 460.0))
+    embun::run(support::controls::Controls::new(), embun::Settings::new("Controls").size(640.0, 520.0))
 }

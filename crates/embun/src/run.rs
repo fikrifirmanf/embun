@@ -22,7 +22,8 @@ pub struct Settings {
     pub appearance: Option<Appearance>,
     /// The glass slider: 0 is clear, 0.5 the macOS default, 1 tinted.
     pub glass_level: f32,
-    pub reduce_transparency: bool,
+    /// Draw solid surfaces instead of glass. `None` follows the system setting, read when the window opens.
+    pub reduce_transparency: Option<bool>,
     /// Also load installed fonts, for emoji and scripts Inter lacks.
     pub system_fonts: bool,
 }
@@ -34,7 +35,7 @@ impl Settings {
             size: [960.0, 640.0],
             appearance: None,
             glass_level: 0.5,
-            reduce_transparency: false,
+            reduce_transparency: None,
             system_fonts: false,
         }
     }
@@ -55,7 +56,7 @@ impl Settings {
     }
 
     pub fn reduce_transparency(mut self, on: bool) -> Self {
-        self.reduce_transparency = on;
+        self.reduce_transparency = Some(on);
         self
     }
 
@@ -173,7 +174,7 @@ impl<A: App + 'static> Shell<A> {
             appearance,
             glass_level: settings.glass_level,
             focused: true,
-            reduce_transparency: settings.reduce_transparency,
+            reduce_transparency: settings.reduce_transparency.unwrap_or_else(system_reduce_transparency),
         };
         let text = if settings.system_fonts { TextSystem::with_system_fonts() } else { TextSystem::new() };
         let ui = Ui::with_text(app, theme, [size.width as f32 / scale, size.height as f32 / scale], text);
@@ -383,5 +384,28 @@ impl<A: App> State<A> {
         self.queue.submit([encoder.finish()]);
         self.window.pre_present_notify();
         self.queue.present(frame);
+    }
+}
+
+/// Whether the system asks apps to avoid transparency: Reduce Transparency
+/// in macOS Accessibility settings. Other platforms report false.
+fn system_reduce_transparency() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceTransparency()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_system_setting_can_be_read_without_a_window() {
+        // The value depends on the machine's settings; this checks the call works.
+        let first = super::system_reduce_transparency();
+        assert_eq!(first, super::system_reduce_transparency(), "reading it twice agrees");
     }
 }

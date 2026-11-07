@@ -10,10 +10,15 @@
 - Option-Left and Option-Right move by word, Option-Backspace deletes a word, and Command-Up and Command-Down go to the start and end of the text. New `Key` variants: `Up`, `Down`, `SelectUp`, `SelectDown`, `WordLeft`, `WordRight`, `SelectWordLeft`, `SelectWordRight`, `DeleteWordBack`, `DocStart` and `DocEnd`.
 - `list`: a scrolling list that builds and lays out only the visible rows, so a million rows scroll at about 0.12 ms per step on an Apple M5. The `list` example shows it.
 - `Image::open` and `Image::from_bytes` load PNG and JPEG images, with an `ImageError` that names the file and the problem.
+- `radio`, and `dialog` with `dialog_panel`: a modal over a dimmed window that closes on Escape or a click outside the panel. `Element::capture_presses` stops a solid panel's presses from reaching an ancestor's `on_press`.
+- Dragging in a text field selects text, and the wheel scrolls a text area. At its limit, the wheel goes on to the page behind it.
+- Switch knobs slide to the other end instead of jumping. The track color still changes at once.
+- The window reads the system Reduce Transparency setting on macOS when it opens.
 - The `controls` and `notes` examples.
 
 ### Changed
 
+- Breaking: `Settings::reduce_transparency` is now an `Option<bool>`; `None`, the default, follows the system. The builder method still takes a `bool`.
 - Home and End go to the start and end of the line. In a single-line field that is the whole text, as before.
 
 ### Fixed

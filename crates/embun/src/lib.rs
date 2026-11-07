@@ -24,7 +24,7 @@ pub use text::{FONT_FAMILY, TextSystem};
 pub use theme::{Appearance, Theme};
 pub use ui::{App, Key, Ui};
 pub use widgets::{
-    Button, ControlSize, button, checkbox, icon_button, segmented, slider, switch, menu, menu_check_item, menu_item, menu_separator, popover, sidebar, sidebar_heading, sidebar_item, toolbar_group,
+    Button, ControlSize, button, checkbox, dialog, dialog_panel, icon_button, radio, segmented, slider, switch, menu, menu_check_item, menu_item, menu_separator, popover, sidebar, sidebar_heading, sidebar_item, toolbar_group,
     toolbar_item,
 };
 

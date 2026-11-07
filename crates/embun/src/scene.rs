@@ -54,10 +54,6 @@ impl Scene {
         if overlay { &mut self.overlay.get_or_insert_with(Layers::default).glass } else { &mut self.glass }
     }
 
-    /// How far the text of field `id` is shifted left to keep its caret visible.
-    pub(crate) fn caret_scroll(&self, id: u64) -> [f32; 2] {
-        self.caret.as_ref().filter(|c| c.id == id).map_or([0.0; 2], |c| c.scroll)
-    }
 }
 
 /// The caret and selection of the text field being edited, in logical
@@ -88,12 +84,25 @@ const PRESS_BRIGHTEN: f32 = 0.14;
 /// Width of the keyboard focus ring and its gap from the control.
 const FOCUS_RING: f32 = 3.0;
 
+#[cfg(test)]
 pub(crate) fn build<M>(
     nodes: &[Node<'_, M>],
     theme: &Theme,
     highlight: &HashMap<u64, Highlight>,
     focused: Option<u64>,
     caret: Option<&Caret>,
+) -> Scene {
+    build_with(nodes, theme, highlight, focused, caret, &HashMap::new())
+}
+
+/// Like [`build`], with the vertical scroll of text areas that are not being edited.
+pub(crate) fn build_with<M>(
+    nodes: &[Node<'_, M>],
+    theme: &Theme,
+    highlight: &HashMap<u64, Highlight>,
+    focused: Option<u64>,
+    caret: Option<&Caret>,
+    field_scroll: &HashMap<u64, f32>,
 ) -> Scene {
     let mut scene = Scene { background: Some(theme.background()), caret: caret.cloned(), ..Default::default() };
     let mut next_group = 1u32 << 16;
@@ -180,7 +189,7 @@ pub(crate) fn build<M>(
                 let inner = [x + pl, y + pt, w - pl - pr, h - pt - pb];
                 let clip = crate::layout::intersect(node.clip, inner);
                 let caret = caret.filter(|c| c.id == node.id);
-                let scroll = caret.map_or([0.0; 2], |c| c.scroll);
+                let scroll = caret.map_or([0.0, field_scroll.get(&node.id).copied().unwrap_or(0.0)], |c| c.scroll);
                 let (origin, wrap) = crate::layout::field_geometry(node.rect, s, &node.text, *multiline, scroll);
                 for r in caret.map_or(&[][..], |c| &c.selection[..]) {
                     let sel = theme.accent().with_alpha(0.3);

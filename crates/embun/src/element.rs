@@ -63,6 +63,7 @@ pub enum Role {
     MenuItem,
     Switch,
     Checkbox,
+    Radio,
     Tab,
     TabList,
     Slider,
@@ -152,6 +153,9 @@ pub(crate) struct Style {
     pub scroll_y: bool,
     /// Draws above everything else, including glass, which it frosts.
     pub overlay: bool,
+    /// Presses on it, or on children without their own handler, go nowhere
+    /// instead of reaching an ancestor's `on_press`.
+    pub capture: bool,
     pub font_size: Option<f32>,
     pub font_weight: Option<u16>,
     pub text_color: Option<Color>,
@@ -542,6 +546,14 @@ impl<M> Element<M> {
     {
         self.value = Some(value.clamp(0.0, 1.0));
         self.on_drag = Some(Box::new(on_change));
+        self
+    }
+
+    /// Stops presses on this element, and on children that handle none, from
+    /// reaching an ancestor's `on_press`. Glass does this already; use it for
+    /// solid panels inside a [`popover`](crate::popover) or dialog.
+    pub fn capture_presses(mut self) -> Self {
+        self.style.capture = true;
         self
     }
 
