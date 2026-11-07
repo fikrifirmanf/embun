@@ -2,7 +2,8 @@
 //! same pictures that Embun's examples use.
 //!
 //! cargo run -p embun-render --example export_backdrops -- <out dir>
-//! Writes {photos,checker,solid}-{light,dark}.png.
+//! Writes {photos,checker,solid,noise}-{light,dark}.png. The noise backdrop is
+//! the same in both appearances; it is there to measure refraction.
 
 #[path = "support/backdrops.rs"]
 mod backdrops;
@@ -19,6 +20,7 @@ fn main() {
             ("photos", backdrops::photos(dark)),
             ("checker", backdrops::checker(dark)),
             ("solid", backdrops::solid(backdrops::WIDTH, backdrops::HEIGHT, flat)),
+            ("noise", backdrops::noise()),
         ];
         for (name, image) in images {
             let path = dir.join(format!("{name}-{appearance}.png"));

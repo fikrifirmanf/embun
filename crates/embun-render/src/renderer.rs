@@ -6,7 +6,6 @@ use crate::GlassParams;
 pub const MAX_SHAPES: usize = 16;
 
 /// Width of the lensing band inside each shape's rim, in logical pixels.
-const BEVEL: f32 = 18.0;
 /// Below this blur sigma (logical pixels) the glass shows the backdrop unblurred.
 /// The shader uses the same threshold.
 const MIN_BLUR_SIGMA: f32 = 0.25;
@@ -61,6 +60,10 @@ struct Uniforms {
     /// offset, gain, curve, chroma
     body_light: [f32; 4],
     body_dark: [f32; 4],
+    /// sharp gain and chroma, light then dark
+    sharp: [f32; 4],
+    /// outline at the ends (light, dark), highlight (light, dark)
+    edges: [f32; 4],
     shapes: [[f32; 4]; MAX_SHAPES],
     extra: [[f32; 4]; MAX_SHAPES],
 }
@@ -438,8 +441,10 @@ impl GlassRenderer {
         let body = |b: crate::Body| [b.offset, b.gain, b.curve, b.chroma];
         out.body_light = body(p.light);
         out.body_dark = body(p.dark);
+        out.sharp = [p.light.sharp_gain, p.light.sharp_chroma, p.dark.sharp_gain, p.dark.sharp_chroma];
+        out.edges = [p.outline_ends[0], p.outline_ends[1], p.highlight[0], p.highlight[1]];
         out.output_gamma = if self.output_gamma { 1.0 } else { 0.0 };
-        out.bevel = BEVEL;
+        out.bevel = p.bevel.max(0.01);
         out
     }
 }

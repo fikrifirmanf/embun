@@ -67,20 +67,33 @@ fn pixels_outside_glass_show_the_backdrop_unchanged() {
 // unslop-ignore TEST_WITHOUT_ASSERTION -- asserts through the assert_near helper
 #[test]
 fn glass_over_flat_backdrops_matches_macos_captures() {
-    // Center pixels read from reference/macos-27.0.1/*/solid-*-glass.png.
-    let cases = [
-        (0.0, 0.0, [242, 242, 247], [229, 229, 235]),
-        (0.5, 0.0, [242, 242, 247], [235, 235, 239]),
-        (1.0, 0.0, [242, 242, 247], [243, 243, 245]),
-        (0.0, 1.0, [28, 28, 30], [48, 48, 51]),
-        (0.5, 1.0, [28, 28, 30], [48, 48, 50]),
-        (1.0, 1.0, [28, 28, 30], [40, 40, 41]),
+    // Center pixels read from reference/macos-27.0.1/{clear,middle,tinted}/solid-*-glass.png
+    // (focused window) and from the same files under inactive/ (window without focus).
+    let (light, dark) = ([242, 242, 247], [28, 28, 30]);
+    let focused = [
+        (0.0, 0.0, light, [246, 246, 251]),
+        (0.5, 0.0, light, [247, 248, 252]),
+        (1.0, 0.0, light, [251, 251, 253]),
+        (0.0, 1.0, dark, [59, 59, 61]),
+        (0.5, 1.0, dark, [59, 59, 61]),
+        (1.0, 1.0, dark, [45, 45, 47]),
+    ];
+    let unfocused = [
+        (0.0, 0.0, light, [229, 229, 235]),
+        (0.5, 0.0, light, [235, 235, 239]),
+        (1.0, 0.0, light, [243, 243, 245]),
+        (0.0, 1.0, dark, [48, 48, 51]),
+        (0.5, 1.0, dark, [48, 48, 50]),
+        (1.0, 1.0, dark, [40, 40, 41]),
     ];
     let gpu = gpu();
-    for (level, appearance, backdrop, macos) in cases {
-        let shapes = [circle(100.0, 50.0, 40.0, appearance)];
-        let center = render(&gpu, backdrop, &shapes, GlassParams::from_level(level, GlassLayers::default(), false))(100, 50);
-        assert_near(center, macos, 3);
+    type Make = fn(f32, GlassLayers, bool) -> GlassParams;
+    for (cases, make) in [(focused, GlassParams::from_level as Make), (unfocused, GlassParams::unfocused as Make)] {
+        for (level, appearance, backdrop, macos) in cases {
+            let shapes = [circle(100.0, 50.0, 40.0, appearance)];
+            let center = render(&gpu, backdrop, &shapes, make(level, GlassLayers::default(), false))(100, 50);
+            assert_near(center, macos, 3);
+        }
     }
 }
 
@@ -89,11 +102,29 @@ fn outline_darkens_the_pixel_just_outside_like_macos() {
     let gpu = gpu();
     // A rectangle with edges on pixel boundaries: left edge x = 60, top edge y = 30.
     let shapes = [GlassShape { center: [100.0, 50.0], half_size: [40.0, 20.0], radius: 10.0, appearance: 0.0 }];
-    let px = render(&gpu, [242, 242, 247], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
-    // macOS clear, light: 178 beside the left edge and 200 above the top edge.
-    assert!(px(59, 50)[1].abs_diff(178) <= 5, "left outline was {:?}", px(59, 50));
-    assert!(px(100, 29)[1].abs_diff(200) <= 6, "top outline was {:?}", px(100, 29));
-    assert!(px(57, 50)[1] >= 241, "two pixels out should be untouched, got {:?}", px(57, 50));
+    let focused = render(&gpu, [242, 242, 247], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
+    // macOS clear, light, focused: 176 beside the left edge, 223 above the top edge.
+    assert!(focused(59, 50)[1].abs_diff(176) <= 5, "left outline was {:?}", focused(59, 50));
+    assert!(focused(100, 29)[1].abs_diff(223) <= 6, "top outline was {:?}", focused(100, 29));
+    assert!(focused(57, 50)[1] >= 241, "two pixels out should be untouched, got {:?}", focused(57, 50));
+    // Without focus: 178 beside the left edge, 200 above the top edge.
+    let unfocused = render(&gpu, [242, 242, 247], &shapes, GlassParams::unfocused(0.0, GlassLayers::default(), false));
+    assert!(unfocused(59, 50)[1].abs_diff(178) <= 5, "left outline was {:?}", unfocused(59, 50));
+    assert!(unfocused(100, 29)[1].abs_diff(200) <= 6, "top outline was {:?}", unfocused(100, 29));
+}
+
+#[test]
+fn focused_glass_brightens_the_inside_of_its_top_edge_like_macos() {
+    let gpu = gpu();
+    let shapes = [GlassShape { center: [100.0, 50.0], half_size: [40.0, 20.0], radius: 10.0, appearance: 1.0 }];
+    let px = render(&gpu, [28, 28, 30], &shapes, GlassParams::from_level(0.0, GlassLayers::default(), false));
+    // macOS clear, dark, focused: 108 in the first pixel inside the top edge,
+    // 87 in the second, against 59 inside; nothing extra inside the left edge.
+    assert!(px(100, 30)[1].abs_diff(108) <= 6, "first row inside the top was {:?}", px(100, 30));
+    assert!(px(100, 31)[1].abs_diff(87) <= 6, "second row inside the top was {:?}", px(100, 31));
+    assert!(px(60, 50)[1].abs_diff(59) <= 4, "first column inside the left was {:?}", px(60, 50));
+    let unfocused = render(&gpu, [28, 28, 30], &shapes, GlassParams::unfocused(0.0, GlassLayers::default(), false));
+    assert!(unfocused(100, 30)[1] < 60, "unfocused glass has no highlight, got {:?}", unfocused(100, 30));
 }
 
 // unslop-ignore TEST_WITHOUT_ASSERTION -- asserts through the assert_near helper

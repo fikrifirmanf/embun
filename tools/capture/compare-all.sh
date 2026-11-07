@@ -6,14 +6,17 @@ set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 cargo build -q -p embun-render --example compare
-for scene in reference/*/*/*-scene.txt; do
-  [ -e "$scene" ] || { echo "no captures yet; run tools/capture/capture.sh first" >&2; exit 1; }
+scenes="$(find reference -name '*-scene.txt' | sort)"
+[ -n "$scenes" ] || { echo "no captures yet; run tools/capture/capture.sh first" >&2; exit 1; }
+for scene in $scenes; do
   case "$scene" in
     */clear/*) level=0 ;;
     */middle/*) level=0.5 ;;
     */tinted/*) level=1 ;;
     *) echo "skipping $scene: folder is not clear, middle or tinted" >&2; continue ;;
   esac
-  target/debug/examples/compare --capture "${scene%-scene.txt}" --level "$level"
+  focus=""
+  case "$scene" in */inactive/*) focus="--unfocused" ;; esac
+  target/debug/examples/compare --capture "${scene%-scene.txt}" --level "$level" $focus
   echo
 done

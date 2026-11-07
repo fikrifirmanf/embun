@@ -160,3 +160,42 @@ pub fn checker(dark: bool) -> Image {
 pub fn solid(width: u32, height: u32, color: [u8; 3]) -> Image {
     Image::new(width, height, color)
 }
+
+/// Smooth random color texture. Every patch looks different, so the compare
+/// tools can find where each glass pixel samples the backdrop from.
+pub fn noise() -> Image {
+    let mut img = Image::new(WIDTH, HEIGHT, [0, 0, 0]);
+    let mut rng = Rng(7);
+    // Two octaves of value noise per channel, cells of 48 and 20 texels.
+    let octaves: Vec<(f32, u32, Vec<[f32; 3]>)> = [(48u32, 0.6f32), (20, 0.4)]
+        .into_iter()
+        .map(|(cell, weight)| {
+            let cols = WIDTH / cell + 2;
+            let rows = HEIGHT / cell + 2;
+            let grid = (0..cols * rows).map(|_| [rng.next(), rng.next(), rng.next()]).collect();
+            (weight, cell, grid)
+        })
+        .collect();
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let mut c = [0.0f32; 3];
+            for (weight, cell, grid) in &octaves {
+                let cols = WIDTH / cell + 2;
+                let (fx, fy) = (x as f32 / *cell as f32, y as f32 / *cell as f32);
+                let (ix, iy) = (fx as u32, fy as u32);
+                let smooth = |t: f32| t * t * (3.0 - 2.0 * t);
+                let (tx, ty) = (smooth(fx.fract()), smooth(fy.fract()));
+                let at = |i: u32, j: u32| grid[(j * cols + i) as usize];
+                let top = mix(at(ix, iy), at(ix + 1, iy), tx);
+                let bottom = mix(at(ix, iy + 1), at(ix + 1, iy + 1), tx);
+                let v = mix(top, bottom, ty);
+                for k in 0..3 {
+                    c[k] += weight * v[k];
+                }
+            }
+            // Stretch the middle of the range so contrast is high everywhere.
+            img.put(x, y, to_u8(c.map(|v| (v - 0.5) * 2.2 + 0.5)));
+        }
+    }
+    img
+}

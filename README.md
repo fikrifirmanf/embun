@@ -14,9 +14,16 @@ Embun is a Rust UI toolkit built on wgpu. It draws translucent glass controls th
 
 The look is measured, not guessed. `tools/capture` shows real macOS 27.0.1 glass on a known backdrop and screenshots it. The `compare` example draws Embun's glass over the same backdrop and diffs the two images.
 
-There are 18 captures: the three transparency settings (clear, middle, tinted), light and dark, each over photos, a checkerboard and a flat color. Across all of them the average per-pixel difference is 0.81 out of 255. The largest gap left is about 3/255 inside the glass at the clear setting over photos.
+Captures cover the three transparency settings (clear, middle, tinted), light and dark, over photos, a checkerboard, random noise and a flat color. macOS draws glass differently when its window has focus, so both looks are captured and fitted:
 
-Only plain shapes have been captured so far, not real toolbars, sidebars or menus.
+| Window | Clear | Middle | Tinted |
+|---|---|---|---|
+| Focused | 2.5 | 1.8 | 1.0 |
+| Without focus | 1.1 | 0.9 | 0.5 |
+
+Each number is the average per-pixel difference, out of 255. Most of what is left is at the clear setting, where macOS bends the backdrop near the edge in a shape Embun only approximates.
+
+Real glass buttons are captured too, but not yet toolbars, sidebars or menus.
 
 ## Platforms
 

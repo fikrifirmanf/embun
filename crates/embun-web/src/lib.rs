@@ -133,9 +133,14 @@ impl EmbunView {
         shadow: bool,
         merge: bool,
         reduce_transparency: bool,
+        focused: bool,
     ) {
         let layers = GlassLayers { frost, lensing, rim, fringe, shadow, merge };
-        self.params = GlassParams::from_level(level, layers, reduce_transparency);
+        self.params = if focused {
+            GlassParams::from_level(level, layers, reduce_transparency)
+        } else {
+            GlassParams::unfocused(level, layers, reduce_transparency)
+        };
     }
 
     /// `scroll` in backdrop texels; `backdrop_scale` in texels per CSS pixel.

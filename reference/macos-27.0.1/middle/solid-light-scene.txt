@@ -2,6 +2,7 @@
 viewport 960.0 600.0
 scale 2.0
 appearance light
+window active
 shape 307.2 336.00000000000006 96.0 60.0 34.0
 shape 842.0 540.0 28.0 28.0 28.0
 shape 904.0 540.0 28.0 28.0 28.0

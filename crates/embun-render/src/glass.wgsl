@@ -24,6 +24,8 @@ struct Uniforms {
     _pad1: f32,
     body_light: vec4f,      // offset, gain, curve, chroma
     body_dark: vec4f,
+    sharp: vec4f,           // sharp gain, sharp chroma: light .xy, dark .zw
+    edges: vec4f,           // outline at the ends (light, dark), highlight (light, dark)
     shapes: array<vec4f, 16>, // center.xy, half_size.xy
     extra: array<vec4f, 16>,  // radius, appearance (0 light, 1 dark), unused, unused
 };
@@ -168,7 +170,7 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let dp = d * u.scale_factor / max(length(grad), 0.25);
     let cov = clamp(0.5 - dp, 0.0, 1.0);
     let outer = clamp(1.5 - dp, 0.0, 1.0);
-    let outline = max(u.outline_light, u.outline_dark);
+    let outline = max(max(u.outline_light, u.outline_dark), max(u.edges.x, u.edges.y));
     if (outer <= 0.0 || (cov <= 0.0 && outline <= 0.0)) {
         return finish(bg);
     }
@@ -186,11 +188,27 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         col.b = frost(p + disp * (1.0 - f)).b;
     }
 
-    // Body: a tone curve on luminance plus a chroma gain (fitted to macOS).
+    // Body: a tone curve on the frosted luminance plus a chroma gain, and a
+    // share of the unblurred backdrop (fitted to macOS).
     let app = appearance_at(p);
     let body = mix(u.body_light, u.body_dark, app);
-    let luma = dot(col, vec3f(0.2126, 0.7152, 0.0722));
+    let sharp_mix = mix(u.sharp.xy, u.sharp.zw, app);
+    let to_luma = vec3f(0.2126, 0.7152, 0.0722);
+    let luma = dot(col, to_luma);
     col = vec3f(body.x + body.y * luma + body.z * luma * luma) + body.w * (col - vec3f(luma));
+    if (sharp_mix.x != 0.0 || sharp_mix.y != 0.0) {
+        let s = to_gamma(backdrop_linear(p + disp, 0.0));
+        let ls = dot(s, to_luma);
+        col += vec3f(sharp_mix.x * ls) + sharp_mix.y * (s - vec3f(ls));
+    }
+
+    // Highlight along the inside of the top and bottom edges, fading over
+    // about two device pixels (a Gaussian fitted to macOS).
+    let highlight = mix(u.edges.z, u.edges.w, app);
+    if (highlight > 0.0) {
+        let depth = max(-dp, 0.0);
+        col += vec3f(highlight * exp(-depth * depth / 3.44) * n.y * n.y);
+    }
 
     // Optional rim light from the top left, with a weaker bounce opposite.
     if (u.rim > 0.0) {
@@ -202,11 +220,13 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     }
     col = clamp(col, vec3f(0.0), vec3f(1.0));
 
-    // Outline: macOS darkens the backdrop in the pixel just outside the shape;
-    // top and bottom get two thirds of the left and right sides' darkening.
+    // Outline: macOS darkens the backdrop in the pixel just outside the shape,
+    // with one strength beside the sides and another above and below.
     var out = bg;
     if (outline > 0.0) {
-        let darken = mix(u.outline_light, u.outline_dark, app) * mix(0.66, 1.0, abs(n.x));
+        let side = mix(u.outline_light, u.outline_dark, app);
+        let ends = mix(u.edges.x, u.edges.y, app);
+        let darken = mix(ends, side, abs(n.x));
         out = mix(bg, bg * (1.0 - darken), outer);
     }
     return finish(mix(out, col, cov));

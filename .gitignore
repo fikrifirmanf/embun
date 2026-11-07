@@ -5,3 +5,7 @@
 #   cargo build --release -p embun-web --target wasm32-unknown-unknown
 #   wasm-bindgen --target web --no-typescript --out-dir demo/embun target/wasm32-unknown-unknown/release/embun_web.wasm
 /demo/embun/
+# Noise-backdrop captures measure refraction. Random noise does not compress
+# (about 76 MB), so they stay local; re-capture with tools/capture/capture.sh.
+/reference/**/noise-*
+/reference/**/controls-noise-*

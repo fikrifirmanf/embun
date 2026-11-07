@@ -1,0 +1,4 @@
+macOS 27.0.1 (26A434)
+glass slider: middle
+captured: 2026-11-07T05:23:24Z
+window: inactive (the capture app was not activated; found 2026-11-07)

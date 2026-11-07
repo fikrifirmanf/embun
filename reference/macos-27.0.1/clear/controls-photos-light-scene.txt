@@ -1,0 +1,17 @@
+# Embun capture scene. Units are points; origin top left.
+viewport 960.0 600.0
+scale 2.0
+appearance light
+window active
+shape 365.75 350.25 16.75 16.25 16.25 glass circle-xlarge
+shape 288.25 350.25 12.75 12.25 12.25 glass circle-large
+shape 216.75 350.25 10.75 10.25 10.25 glass circle-regular
+shape 149.0 350.25 9.0 8.5 8.5 glass circle-small
+shape 510.25 260.0 38.25 18.0 18.0 prominent prominent-xlarge
+shape 389.75 260.0 34.25 14.0 14.0 prominent prominent-large
+shape 275.25 260.0 32.25 12.0 6.0 prominent prominent-regular
+shape 167.5 260.0 27.5 10.0 5.0 prominent prominent-small
+shape 510.25 168.0 38.25 18.0 18.0 glass glass-xlarge
+shape 389.75 168.0 34.25 14.0 14.0 glass glass-large
+shape 275.25 168.0 32.25 12.0 6.0 glass glass-regular
+shape 167.5 168.0 27.5 10.0 5.0 glass glass-small

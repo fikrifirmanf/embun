@@ -1,0 +1,4 @@
+macOS 27.0.1 (26A434)
+glass slider: middle
+window: active
+captured: 2026-11-07T08:11:52Z

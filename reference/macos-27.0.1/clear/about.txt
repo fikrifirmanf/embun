@@ -1,3 +1,4 @@
 macOS 27.0.1 (26A434)
 glass slider: clear
-captured: 2026-11-07T05:22:32Z
+window: active
+captured: 2026-11-07T08:09:25Z

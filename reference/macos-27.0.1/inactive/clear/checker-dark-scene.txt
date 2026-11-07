@@ -1,0 +1,8 @@
+# Embun capture scene. Units are points; origin top left.
+viewport 960.0 600.0
+scale 2.0
+appearance dark
+shape 307.2 336.00000000000006 96.0 60.0 34.0
+shape 842.0 540.0 28.0 28.0 28.0
+shape 904.0 540.0 28.0 28.0 28.0
+shape 480.0 44.0 230.0 26.0 26.0

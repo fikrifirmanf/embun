@@ -2,7 +2,9 @@
 
 Draws translucent glass shapes with wgpu, in the style of macOS 27. This is the renderer behind [Embun](https://crates.io/crates/embun), and you can use it on its own.
 
-Each shape frosts the backdrop behind it, bends it slightly near the edge, tints it, and gets a one-pixel outline. Shapes that come within about 19 points of each other merge like water drops. All of this was fitted to screenshots of real macOS 27.0.1 glass: the average difference is 0.81 out of 255 per pixel over 18 captures.
+Each shape mixes a sharp and a frosted copy of the backdrop behind it, bends it near the edge, tints it, and gets a one-pixel outline and a thin highlight along the top and bottom. Shapes that come within about 19 points of each other merge like water drops. All of this was fitted to screenshots of real macOS 27.0.1 glass: the average difference per pixel is 1.0 to 2.5 out of 255 for a focused window, depending on the transparency setting.
+
+`GlassParams::from_level` gives the look of a focused window. Use `GlassParams::unfocused` for a window without focus, which macOS frosts more.
 
 The renderer draws into any texture view you give it, so it fits inside a winit app, an iced `shader` widget, an egui paint callback or a Bevy render node.
 

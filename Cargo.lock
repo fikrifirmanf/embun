@@ -178,7 +178,7 @@ dependencies = [
 
 [[package]]
 name = "embun"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "embun-motion",
  "embun-render",
@@ -186,11 +186,11 @@ dependencies = [
 
 [[package]]
 name = "embun-motion"
-version = "0.0.1"
+version = "0.0.2"
 
 [[package]]
 name = "embun-render"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "bytemuck",
  "png",
@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "embun-web"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "console_error_panic_hook",
  "embun-render",

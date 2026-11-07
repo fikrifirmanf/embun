@@ -177,6 +177,7 @@ pre code { background: none; padding: 0; font-size: inherit; }
             <label><input type="checkbox" id="f-adaptive" checked>Adaptive tint</label>
           </div>
         </fieldset>
+        <label class="solo"><input type="checkbox" id="f-focused" checked>Window has focus</label>
         <label class="solo"><input type="checkbox" id="f-reduce">Reduce transparency</label>
         <div class="btns">
           <button type="button" class="btn" id="toggle-scroll">Pause scrolling</button>
@@ -184,7 +185,7 @@ pre code { background: none; padding: 0; font-size: inherit; }
         </div>
       </form>
     </div>
-    <p class="stage-note"><span id="engine">Loading the renderer…</span> The Rust renderer is fitted to 18 macOS 27.0.1 captures. Rim light and shadow are extras: macOS draws neither on resting controls.</p>
+    <p class="stage-note"><span id="engine">Loading the renderer…</span> The Rust renderer is fitted to 42 macOS 27.0.1 captures. Turn off "Window has focus" to see glass in a window you aren't using: macOS frosts it more and drops the edge highlight. Rim light and shadow are extras: macOS draws neither on resting controls.</p>
   </section>
 
   <div class="plan">
@@ -201,10 +202,12 @@ pre code { background: none; padding: 0; font-size: inherit; }
       <ul>
         <li>The workspace lives at <code>~/Development/embun</code> with <code>embun-render</code>, <code>embun-motion</code>, <code>embun</code> and <code>embun-web</code>.</li>
         <li><code>embun-render</code> draws frost, lensing, the macOS outline and merging, with rim light and shadow as optional extras. It renders natively on Metal and in the browser through WebAssembly.</li>
-        <li>Phase 0 is done for basic shapes. A capture app put real macOS 27.0.1 glass over our test backdrops at three slider positions, in light and dark: 18 pairs of screenshots. The shader is fitted to them. Average error went from 8–35 to 0.0–2.3 out of 255 per capture. Corners use Apple's continuous curve, and merged shapes match the macOS neck within a pixel.</li>
+        <li>Phase 0 is done for basic shapes. A capture app puts real macOS 27.0.1 glass over our test backdrops at three slider positions, in light and dark. The first 18 captures turned out to show a window without focus, which looks different, so focused windows were captured again. The shader is fitted to both: average error is 1.0–2.5 out of 255 for focused glass and 0.5–1.1 without focus. Corners use Apple's continuous curve, and merged shapes match the macOS neck within a pixel.</li>
+        <li>Focused glass at the clear setting is mostly the sharp backdrop, bent near the edge, with a thin highlight along the top and bottom. The slider keeps the same 16 pt blur and changes how much of the sharp backdrop shows through.</li>
         <li><code>embun-motion</code> has springs with SwiftUI-style response and damping settings.</li>
-        <li>17 tests pass. Seven render real frames on the GPU: one checks glass colors against pixels read from the macOS captures, and one guards against a seam where shapes merge.</li>
-        <li>Next: captures of real controls (toolbar, sidebar, menus) beyond plain shapes, and the lensing at the rim, which matters most at the clear setting.</li>
+        <li>20 tests pass. Eight render real frames on the GPU: they check glass colors, the outline and the edge highlight against pixels read from the macOS captures, and guard against a seam where shapes merge.</li>
+        <li>Real glass buttons are captured too: small and regular buttons are rounded rectangles with a radius of a quarter of their height, larger ones are capsules.</li>
+        <li>Next: the exact shape of the bending at the rim, which is most of the error left at the clear setting; tinted glass for prominent buttons; then toolbars, sidebars and menus.</li>
       </ul>
     </section>
 
@@ -524,7 +527,7 @@ fn shade_glass(px: vec2f, d: f32, n: vec2f, appearance: f32) -&gt; vec3f {
 
   const state = {
     level: 0.5, dark: startDark ? 1 : 0, mode: 'photos',
-    blur: true, refract: true, rim: false, fringe: true, shadow: false, merge: true, adaptive: true, reduce: false,
+    blur: true, refract: true, rim: false, fringe: true, shadow: false, merge: true, adaptive: true, reduce: false, focused: true,
     scrolling: !reducedMotion, scroll: 0
   };
   if (startDark) document.getElementById('app-dark').checked = true;
@@ -780,7 +783,7 @@ fn shade_glass(px: vec2f, d: f32, n: vec2f, appearance: f32) -&gt; vec3f {
   function drawRust() {
     shapes.forEach((s, i) => rustShapes.set([s.cx, s.cy, s.hw, s.hh, s.r, s.app], i * 6));
     rust.set_shapes(rustShapes.subarray(0, shapes.length * 6));
-    rust.set_glass(state.level, state.blur, state.refract, state.rim, state.fringe, state.shadow, state.merge, state.reduce);
+    rust.set_glass(state.level, state.blur, state.refract, state.rim, state.fringe, state.shadow, state.merge, state.reduce, state.focused);
     rust.set_scroll(state.scroll, backdropScale());
     rust.render();
   }
@@ -843,7 +846,7 @@ fn shade_glass(px: vec2f, d: f32, n: vec2f, appearance: f32) -&gt; vec3f {
   document.getElementById('level').addEventListener('input', e => { state.level = e.target.value / 100; levelOut.textContent = state.level.toFixed(2); needs = true; });
   form.querySelectorAll('input[name="appearance"]').forEach(r => r.addEventListener('change', () => { state.dark = r.value === 'dark' ? 1 : 0; regen(); }));
   form.querySelectorAll('input[name="backdrop"]').forEach(r => r.addEventListener('change', () => { state.mode = r.value; regen(); }));
-  const flags = { 'f-blur': 'blur', 'f-refract': 'refract', 'f-rim': 'rim', 'f-fringe': 'fringe', 'f-shadow': 'shadow', 'f-merge': 'merge', 'f-adaptive': 'adaptive', 'f-reduce': 'reduce' };
+  const flags = { 'f-blur': 'blur', 'f-refract': 'refract', 'f-rim': 'rim', 'f-fringe': 'fringe', 'f-shadow': 'shadow', 'f-merge': 'merge', 'f-adaptive': 'adaptive', 'f-reduce': 'reduce', 'f-focused': 'focused' };
   Object.entries(flags).forEach(([id, key]) => document.getElementById(id).addEventListener('change', e => { state[key] = e.target.checked; needs = true; }));
   const scrollBtn = document.getElementById('toggle-scroll');
   const syncScrollBtn = () => { scrollBtn.textContent = state.scrolling ? 'Pause scrolling' : 'Resume scrolling'; };

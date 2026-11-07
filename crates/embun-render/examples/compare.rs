@@ -8,8 +8,11 @@
 //! from macOS, which is the error of drawing no glass at all.
 //! The output image is macOS | Embun | difference (x4), at point resolution.
 //! --embun-out <png> also saves Embun's render at full resolution.
-//! --set name=value overrides one parameter (blur, lensing, fringe, merge_k,
-//! rim, shadow; outline scales the measured outline); repeat it for several.
+//! --set name=value overrides one parameter (blur, lensing, bevel, fringe,
+//! merge_k, rim, shadow; outline, highlight and sharp scale the measured
+//! values); repeat it for several.
+//! --unfocused uses the look of a window without focus; compare-all.sh passes
+//! it for captures under inactive/.
 //!
 //! Shape edges are snapped to device pixels first, as macOS layout does.
 
@@ -94,8 +97,13 @@ fn snap(shape: &mut GlassShape, scale: f32) {
     }
 }
 
-fn merge_k(args: &[String], level: f32) -> f32 {
-    overrides(args, GlassParams::from_level(level, GlassLayers::default(), false)).merge_k
+fn params(args: &[String], level: f32) -> GlassParams {
+    let base = if args.iter().any(|a| a == "--unfocused") {
+        GlassParams::unfocused(level, GlassLayers::default(), false)
+    } else {
+        GlassParams::from_level(level, GlassLayers::default(), false)
+    };
+    overrides(args, base)
 }
 
 /// Same as the shader's sd_round_box, continuous corners included.
@@ -156,8 +164,19 @@ fn overrides(args: &[String], mut p: GlassParams) -> GlassParams {
         match name {
             "blur" => p.blur_sigma = v,
             "lensing" => p.lensing = v,
+            "bevel" => p.bevel = v,
+            "highlight" => p.highlight = p.highlight.map(|h| h * v),
+            "sharp" => {
+                for b in [&mut p.light, &mut p.dark] {
+                    b.sharp_gain *= v;
+                    b.sharp_chroma *= v;
+                }
+            }
             "fringe" => p.fringe = v,
-            "outline" => p.outline = p.outline.map(|o| o * v),
+            "outline" => {
+                p.outline = p.outline.map(|o| o * v);
+                p.outline_ends = p.outline_ends.map(|o| o * v);
+            }
             "merge_k" => p.merge_k = v,
             "rim" => p.rim = v,
             "shadow" => p.shadow = v,
@@ -193,12 +212,13 @@ fn main() {
         backdrop_scale: scale,
         scroll: 0.0,
         shapes: &scene.shapes,
-        params: overrides(&args, GlassParams::from_level(level, GlassLayers::default(), false)),
+        params: params(&args, level),
     };
     let (embun, ew, eh) = offscreen::render_rgba(&device, &queue, &renderer, &backdrop, &frame);
     assert_eq!((ew, eh), (width, height), "Embun rendered a different size than the capture");
 
-    println!("{prefix}  level {level}  {}", if scene.dark { "dark" } else { "light" });
+    let focus = if args.iter().any(|a| a == "--unfocused") { "unfocused" } else { "focused" };
+    println!("{prefix}  level {level}  {}  {focus}", if scene.dark { "dark" } else { "light" });
     println!("{:<10} {:>14} {:>14}   (mean / p95 of |difference|, 0..255)", "shape", "embun vs mac", "no glass vs mac");
     let mut all = Vec::new();
     for (i, shape) in scene.shapes.iter().enumerate() {
@@ -211,7 +231,7 @@ fn main() {
     all.dedup();
     let (e, b) = (error(&embun, &mac, &all), error(&bare, &mac, &all));
     println!("{:<10} {:>6.1} / {:>5.1} {:>6.1} / {:>5.1}", "all", e.mean, e.p95, b.mean, b.p95);
-    for (name, band) in bands(&scene.shapes, merge_k(&args, level), scale, width, height) {
+    for (name, band) in bands(&scene.shapes, params(&args, level).merge_k, scale, width, height) {
         let (e, b) = (error(&embun, &mac, &band), error(&bare, &mac, &band));
         println!("{name:<10} {:>6.1} / {:>5.1} {:>6.1} / {:>5.1}", e.mean, e.p95, b.mean, b.p95);
     }
