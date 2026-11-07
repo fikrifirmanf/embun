@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # The GPU tests run on Mesa's llvmpipe, a software GPU, through Vulkan and
+  # through OpenGL. Both pass locally in a Debian container with these packages.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [vulkan, gl]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install a software GPU
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1 libegl1 libgl1-mesa-dri libegl-mesa0
+      - name: Test
+        run: cargo test --workspace
+        env:
+          WGPU_BACKEND: ${{ matrix.backend }}
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy --workspace --exclude embun-web --all-targets -- -D warnings
+      - name: Clippy for the browser build
+        run: cargo clippy -p embun-web --target wasm32-unknown-unknown -- -D warnings
+      - name: Docs
+        run: cargo doc --workspace --exclude embun-web --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings

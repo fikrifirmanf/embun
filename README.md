@@ -36,22 +36,28 @@ Measured with `cargo run --release -p embun-render --example bench` on an Apple 
 | 1 full-height sidebar | 0.57 ms |
 | 4 buttons, content behind them changing every frame | 0.87 ms |
 
-A 120 Hz display allows 8.3 ms per frame. Slower GPUs will take longer; these are not measured yet.
+A 120 Hz display allows 8.3 ms per frame. Slower GPUs take longer and are not measured yet.
+
+Without a GPU, wgpu can draw on the CPU through Mesa's llvmpipe on Linux (or WARP on Windows). Embun works there, but slowly: on 10 CPU cores at the same size, 4 buttons take 22.6 ms and 16 buttons 45.3 ms per frame. That is fine for a still UI, not for smooth animation.
 
 ## Platforms
 
 | Backend | Tested |
 |---|---|
 | Metal (macOS) | yes, all tests and captures |
+| Vulkan on Linux | yes, all tests, on the llvmpipe software GPU |
+| OpenGL on Linux | yes, all tests, on llvmpipe |
 | WebGPU in Chrome | yes, the demo page |
 | WebGL2 in Chrome | yes, the demo page with WebGPU turned off |
-| Vulkan, DirectX 12 | not yet |
+| DirectX 12, Vulkan on real GPUs | not yet |
+
+CI runs the tests on llvmpipe through both Vulkan and OpenGL.
 
 ## Try it
 
 ```sh
 cargo run -p embun-render --example snapshot -- --out glass.png
-cargo test --workspace   # needs a GPU
+cargo test --workspace   # needs a GPU or a software one such as llvmpipe
 ```
 
 `snapshot` writes a 1920×1200 image of four glass shapes over a generated backdrop of photo-like tiles. Add `--dark` for dark glass, or `--level 0` for the clear setting and `--level 1` for tinted.

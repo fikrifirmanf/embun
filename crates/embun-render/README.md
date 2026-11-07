@@ -54,7 +54,7 @@ For tests and screenshots, `offscreen::render_rgba` renders a frame and returns 
 
 The glass shader runs only in a rectangle around each shape, and each pixel only looks at the shapes near it. The rest of the target gets a plain copy of the backdrop, so cost grows with the area the glass covers, not with screen size or shape count. On an Apple M5 at 2880×1864, a frame with 4 glass buttons takes 0.26 ms of GPU time, 16 buttons 0.78 ms, and a full-height sidebar 0.57 ms (`cargo run --release -p embun-render --example bench`). The frost blur is computed once and reused until the backdrop changes: after you draw new content into the backdrop texture, call `regenerate_mips`, which also tells the next `render` to blur again.
 
-Tested on Metal, and on WebGPU and WebGL2 in Chrome. Vulkan and DirectX 12 are not tested yet.
+Tested on Metal, on Vulkan and OpenGL through the llvmpipe software GPU, and on WebGPU and WebGL2 in Chrome. DirectX 12 is not tested yet.
 
 Embun is not affiliated with Apple. It uses no Apple code, fonts or symbols.
 

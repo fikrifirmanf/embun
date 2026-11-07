@@ -1,5 +1,6 @@
 //! Renders real frames on the GPU and checks pixels.
-//! Needs a GPU adapter (Metal, Vulkan, DX12 or a software adapter).
+//! Needs a GPU adapter (Metal, Vulkan, DX12, GL or a software adapter such as
+//! llvmpipe). Set WGPU_BACKEND (for example `vulkan` or `gl`) to pick one.
 
 #[path = "../examples/support/backdrops.rs"]
 mod backdrops;
@@ -14,7 +15,7 @@ struct Gpu {
 
 fn gpu() -> Gpu {
     let (device, queue) = pollster::block_on(async {
-        let adapter = wgpu::Instance::default()
+        let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env())
             .request_adapter(&wgpu::RequestAdapterOptions::default())
             .await
             .expect("these tests need a GPU adapter");

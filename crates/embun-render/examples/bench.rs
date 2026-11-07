@@ -1,9 +1,11 @@
 //! Times glass frames at a 14-inch MacBook Pro screen size (2880x1864 pixels).
 //!
-//! cargo run --release -p embun-render --example bench
+//! cargo run --release -p embun-render --example bench [-- --rounds N]
+//!
+//! Set WGPU_BACKEND (vulkan, metal, dx12, gl) to pick a backend.
 //!
 //! Keeps two frames in flight, like a swapchain. Cycles through the cases in
-//! short bursts, eight times, and reports the fastest burst per case: other
+//! short bursts, eight times by default, and reports the fastest burst per case: other
 //! apps using the GPU only ever add time, and their load changes over seconds.
 //! Wall-clock time per frame; on an idle GPU this is the GPU cost.
 
@@ -14,15 +16,21 @@ use std::time::Instant;
 const SIZE: [u32; 2] = [2880, 1864];
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let rounds: usize = match args.iter().position(|a| a == "--rounds") {
+        Some(i) => args.get(i + 1).and_then(|n| n.parse().ok()).expect("--rounds takes a number"),
+        None => 8,
+    };
     let (device, queue, name) = pollster::block_on(async {
-        let adapter = wgpu::Instance::default()
+        let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env())
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 ..Default::default()
             })
             .await
             .expect("no GPU adapter");
-        let name = adapter.get_info().name;
+        let info = adapter.get_info();
+        let name = format!("{} ({:?})", info.name, info.backend);
         let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor::default()).await.expect("request device");
         (device, queue, name)
     });
@@ -64,7 +72,7 @@ fn main() {
 
     println!("{name}, {}x{} pixels", SIZE[0], SIZE[1]);
     let mut best = [f64::MAX; 7];
-    for _ in 0..8 {
+    for _ in 0..rounds {
         for (i, (_, shapes, layers, content_changes)) in cases.iter().enumerate() {
             let frame = Frame {
                 viewport: [SIZE[0] as f32 / 2.0, SIZE[1] as f32 / 2.0],
