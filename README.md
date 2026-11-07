@@ -1,0 +1,44 @@
+# Embun
+
+Embun is a Rust UI toolkit built on wgpu. It draws translucent glass controls that match the look of macOS 27, on any platform wgpu runs on. Embun is Indonesian for dew.
+
+**Status: early.** The glass renderer and the spring animations work. The widget framework is not written yet, so there are no buttons or windows to use.
+
+| Crate | What it does |
+|---|---|
+| [`embun-render`](crates/embun-render) | Draws glass shapes over a backdrop into any wgpu texture. Frost, edge bending, tint, outline, and shapes that merge when they get close. |
+| [`embun-motion`](crates/embun-motion) | Springs, described the SwiftUI way with a response time and a damping fraction. |
+| [`embun`](crates/embun) | The framework, later. For now it re-exports the two crates above. |
+
+## How close it is to macOS
+
+The look is measured, not guessed. `tools/capture` shows real macOS 27.0.1 glass on a known backdrop and screenshots it. The `compare` example draws Embun's glass over the same backdrop and diffs the two images.
+
+There are 18 captures: the three transparency settings (clear, middle, tinted), light and dark, each over photos, a checkerboard and a flat color. Across all of them the average per-pixel difference is 0.81 out of 255. The largest gap left is about 3/255 inside the glass at the clear setting over photos.
+
+Only plain shapes have been captured so far, not real toolbars, sidebars or menus.
+
+## Platforms
+
+| Backend | Tested |
+|---|---|
+| Metal (macOS) | yes, all tests and captures |
+| WebGPU in Chrome | yes, the demo page |
+| Vulkan, DirectX 12, WebGL2 | not yet |
+
+## Try it
+
+```sh
+cargo run -p embun-render --example snapshot -- --out glass.png
+cargo test --workspace   # needs a GPU
+```
+
+`snapshot` writes a 1920×1200 image of four glass shapes over a generated backdrop of photo-like tiles. Add `--dark` for dark glass, or `--level 0` for the clear setting and `--level 1` for tinted.
+
+## Not affiliated with Apple
+
+Embun is an independent project. It uses no Apple code, fonts or symbols. The look is matched from screenshots of the macOS UI.
+
+## License
+
+MIT or Apache-2.0, at your option.

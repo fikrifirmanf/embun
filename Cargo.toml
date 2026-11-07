@@ -11,10 +11,13 @@ members = [
 version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["wgpu", "glass", "gui", "blur", "shader"]
+categories = ["gui", "rendering", "graphics"]
 
 [workspace.dependencies]
-embun-render = { path = "crates/embun-render" }
-embun-motion = { path = "crates/embun-motion" }
+embun-render = { path = "crates/embun-render", version = "0.0.1" }
+embun-motion = { path = "crates/embun-motion", version = "0.0.1" }
 wgpu = "30.0.1"
 bytemuck = { version = "1.25", features = ["derive"] }
 pollster = "1.0"

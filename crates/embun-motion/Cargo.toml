@@ -4,3 +4,6 @@ description = "Springs and transitions for Embun"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme.workspace = true
+keywords = ["spring", "animation", "gui", "embun"]
+categories = ["gui"]
