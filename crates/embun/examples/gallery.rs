@@ -2,7 +2,7 @@
 //!
 //! cargo run -p embun --example gallery -- [out-dir]
 //!
-//! Writes gallery-light.png and gallery-dark.png at 2x scale.
+//! Writes gallery-light.png, gallery-dark.png and gallery-menu.png at 2x scale.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -19,9 +19,11 @@ fn main() {
         adapter.request_device(&wgpu::DeviceDescriptor::default()).await.expect("request device")
     });
     let mut renderer = Renderer::new(&device, &queue, SNAPSHOT_FORMAT);
-    for (name, appearance) in [("light", Appearance::Light), ("dark", Appearance::Dark)] {
+    for (name, appearance, menu_open) in [("light", Appearance::Light, false), ("dark", Appearance::Dark, false), ("menu", Appearance::Light, true)] {
         let theme = Theme { appearance, ..Theme::default() };
-        let mut ui = Ui::new(support::library::Library::new(), theme, [1100.0, 700.0]);
+        let mut library = support::library::Library::new();
+        library.menu_open = menu_open;
+        let mut ui = Ui::new(library, theme, [1100.0, 700.0]);
         let (pixels, width, height) = snapshot(&mut ui, &mut renderer, &device, &queue, 2.0);
         let path = format!("{out}/gallery-{name}.png");
         let file = std::fs::File::create(&path).expect("create png");

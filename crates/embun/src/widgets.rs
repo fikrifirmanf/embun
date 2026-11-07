@@ -192,6 +192,56 @@ pub fn sidebar_heading<M>(label: impl Into<String>) -> Element<M> {
     div().px_2().pt_3().pb_1().child(text(label).text_size(11.0).font_semibold()).role(Role::Heading)
 }
 
+/// A layer over the whole window holding `content` (usually a [`menu`]).
+/// Clicking outside `content`, or pressing Escape, sends `dismiss`; your
+/// `update` should then stop showing the popover. Place `content` with
+/// `.absolute()` and `top`/`left`, for example just under the button that
+/// opened it.
+pub fn popover<M>(dismiss: M, content: impl Into<Element<M>>) -> Element<M> {
+    div().overlay().inset(0.0).on_press(dismiss).role(Role::Generic).label("Dismiss").child(content)
+}
+
+/// A glass menu panel: a column of [`menu_item`]s.
+pub fn menu<M>() -> Element<M> {
+    div().min_w(180.0).p_1().gap_0().rounded(12.0).glass().role(Role::Menu)
+}
+
+/// A row in a [`menu`].
+pub fn menu_item<M>(label: impl Into<String>, message: M) -> Element<M> {
+    let label = label.into();
+    row()
+        .items_center()
+        .h(26.0)
+        .px_2()
+        .rounded(7.0)
+        .child(text(label.clone()).text_size(13.0))
+        .on_press(message)
+        .role(Role::MenuItem)
+        .label(label)
+}
+
+/// A menu row with a check mark column: checked rows show ✓, and labels
+/// line up whether checked or not.
+pub fn menu_check_item<M>(label: impl Into<String>, checked: bool, message: M) -> Element<M> {
+    let label = label.into();
+    let mark = div().w(18.0).shrink_0().child(text(if checked { "✓" } else { "" }).text_size(13.0));
+    row()
+        .items_center()
+        .h(26.0)
+        .px_2()
+        .rounded(7.0)
+        .child(mark)
+        .child(text(label.clone()).text_size(13.0))
+        .on_press(message)
+        .role(Role::MenuItem)
+        .label(if checked { format!("{label}, checked") } else { label })
+}
+
+/// A thin line between groups of menu items.
+pub fn menu_separator<M>() -> Element<M> {
+    div().h(9.0).px_2().justify_center().child(div().h(1.0).bg(crate::Color::rgba(128, 128, 128, 0.25)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

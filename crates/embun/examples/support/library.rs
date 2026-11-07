@@ -10,6 +10,8 @@ pub struct Library {
     pub favorites: Vec<bool>,
     pub selected: Option<usize>,
     pub query: String,
+    pub menu_open: bool,
+    pub newest_first: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -19,6 +21,8 @@ pub enum Msg {
     Favorite,
     Share,
     Search(String),
+    Menu(bool),
+    Sort(bool),
 }
 
 pub const ALBUMS: [&str; 4] = ["All Photos", "Favorites", "Travel", "Family"];
@@ -27,7 +31,7 @@ impl Library {
     pub fn new() -> Self {
         let photos: Vec<Image> = (0..12).map(|i| landscape(i, 320, 240)).collect();
         let favorites = vec![false; photos.len()];
-        Self { photos, album: 0, favorites, selected: Some(4), query: String::new() }
+        Self { photos, album: 0, favorites, selected: Some(4), query: String::new(), menu_open: false, newest_first: true }
     }
 }
 
@@ -45,6 +49,11 @@ impl App for Library {
             }
             Msg::Share => {}
             Msg::Search(query) => self.query = query,
+            Msg::Menu(open) => self.menu_open = open,
+            Msg::Sort(newest_first) => {
+                self.newest_first = newest_first;
+                self.menu_open = false;
+            }
         }
     }
 
@@ -92,9 +101,25 @@ impl App for Library {
                     .px_1()
                     .child(text_input(self.query.clone(), Msg::Search).placeholder("Search").w(180.0).rounded_full().key("search").label("Search")),
             )
-            .child(toolbar_group().child(toolbar_item(if favorite { "♥" } else { "♡" }, Msg::Favorite).key("favorite").label("Favorite")))
+            .child(
+                toolbar_group()
+                    .child(toolbar_item(if favorite { "♥" } else { "♡" }, Msg::Favorite).key("favorite").label("Favorite"))
+                    .child(toolbar_item("•••", Msg::Menu(true)).key("more").label("More")),
+            )
             .child(button("Share").size(ControlSize::Large).prominent().on_press(Msg::Share).key("share"));
 
-        div().child(column().scroll_y().h_full().child(grid)).child(sidebar).child(toolbar)
+        let mut window = div().child(column().scroll_y().h_full().child(grid)).child(sidebar).child(toolbar);
+        if self.menu_open {
+            let menu = menu()
+                .absolute()
+                .top(52.0)
+                .right(100.0)
+                .child(menu_check_item("Newest First", self.newest_first, Msg::Sort(true)))
+                .child(menu_check_item("Oldest First", !self.newest_first, Msg::Sort(false)))
+                .child(menu_separator())
+                .child(menu_check_item("Show Favorites", false, Msg::Album(1)));
+            window = window.child(popover(Msg::Menu(false), menu));
+        }
+        window
     }
 }

@@ -24,10 +24,36 @@ pub(crate) struct Scene {
     pub content: Vec<Prim>,
     pub glass: Vec<GlassShape>,
     pub foreground: Vec<Prim>,
+    /// Overlays (menus, popovers): drawn over the finished base layers,
+    /// whose glass frosts that finished image.
+    pub overlay: Option<Layers>,
     pub caret: Option<Caret>,
 }
 
+/// The three layers of an overlay.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Layers {
+    pub content: Vec<Prim>,
+    pub glass: Vec<GlassShape>,
+    pub foreground: Vec<Prim>,
+}
+
 impl Scene {
+    fn prims(&mut self, overlay: bool, on_glass: bool) -> &mut Vec<Prim> {
+        match (overlay, on_glass) {
+            (false, false) => &mut self.content,
+            (false, true) => &mut self.foreground,
+            (true, on_glass) => {
+                let o = self.overlay.get_or_insert_with(Layers::default);
+                if on_glass { &mut o.foreground } else { &mut o.content }
+            }
+        }
+    }
+
+    fn shapes(&mut self, overlay: bool) -> &mut Vec<GlassShape> {
+        if overlay { &mut self.overlay.get_or_insert_with(Layers::default).glass } else { &mut self.glass }
+    }
+
     /// How far the text of field `id` is shifted left to keep its caret visible.
     pub(crate) fn caret_scroll(&self, id: u64) -> f32 {
         self.caret.filter(|c| c.id == id).map_or(0.0, |c| c.scroll)
@@ -77,10 +103,13 @@ pub(crate) fn build<M>(
             end[i] = end[last];
         }
     }
-    let mut borders: Vec<(usize, bool, Prim)> = Vec::new();
+    let mut borders: Vec<(usize, bool, bool, Prim)> = Vec::new();
     for (i, node) in nodes.iter().enumerate() {
         let s = &node.el.style;
-        let layer = if node.on_glass.is_some() { &mut scene.foreground } else { &mut scene.content };
+        let (overlay, on_glass) = (node.in_overlay, node.on_glass.is_some());
+        // This element's prims, in paint order; moved to their layer below.
+        let mut out: Vec<Prim> = Vec::new();
+        let layer = &mut out;
         if let Some(glass) = s.glass {
             let h = highlight.get(&node.id).copied().unwrap_or_default();
             let [x, y, w, hgt] = node.rect;
@@ -99,7 +128,7 @@ pub(crate) fn build<M>(
                 next_group += 1;
                 next_group
             });
-            scene.glass.push(shape);
+            scene.shapes(overlay).push(shape);
         } else {
             // Pressable items on glass (toolbar items, sidebar rows) show a
             // soft fill while hovered or pressed.
@@ -118,7 +147,7 @@ pub(crate) fn build<M>(
             if let Some(border) = s.border {
                 let clear = Color::TRANSPARENT;
                 let ring = Prim::Rect { rect: node.rect, radius: s.radius, top: clear, bottom: clear, border: Some(border), clip: node.clip };
-                borders.push((end[i], node.on_glass.is_some(), ring));
+                borders.push((end[i], on_glass, overlay, ring));
             }
         }
         match &node.el.kind {
@@ -171,13 +200,14 @@ pub(crate) fn build<M>(
             }
             Kind::Div => {}
         }
+        scene.prims(overlay, on_glass).append(&mut out);
         if focused == Some(node.id) {
             let [x, y, w, h] = node.rect;
-            let out = FOCUS_RING + 1.0;
+            let gap = FOCUS_RING + 1.0;
             let clear = Color::TRANSPARENT;
-            scene.foreground.push(Prim::Rect {
-                rect: [x - out, y - out, w + 2.0 * out, h + 2.0 * out],
-                radius: s.radius + out,
+            scene.prims(overlay, true).push(Prim::Rect {
+                rect: [x - gap, y - gap, w + 2.0 * gap, h + 2.0 * gap],
+                radius: s.radius + gap,
                 top: clear,
                 bottom: clear,
                 border: Some((FOCUS_RING, theme.accent().with_alpha(0.75))),
@@ -185,8 +215,8 @@ pub(crate) fn build<M>(
             });
         }
         while borders.last().is_some_and(|(e, ..)| *e == i) {
-            let (_, on_glass, ring) = borders.pop().expect("border");
-            if on_glass { scene.foreground.push(ring) } else { scene.content.push(ring) }
+            let (_, on_glass, overlay, ring) = borders.pop().expect("border");
+            scene.prims(overlay, on_glass).push(ring);
         }
     }
     scene

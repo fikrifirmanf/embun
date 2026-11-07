@@ -23,7 +23,10 @@ pub use run::{RunError, Settings, run};
 pub use text::{FONT_FAMILY, TextSystem};
 pub use theme::{Appearance, Theme};
 pub use ui::{App, Key, Ui};
-pub use widgets::{Button, ControlSize, button, icon_button, sidebar, sidebar_heading, sidebar_item, toolbar_group, toolbar_item};
+pub use widgets::{
+    Button, ControlSize, button, icon_button, menu, menu_check_item, menu_item, menu_separator, popover, sidebar, sidebar_heading, sidebar_item, toolbar_group,
+    toolbar_item,
+};
 
 pub use embun_motion as motion;
 pub use embun_render as render_glass;

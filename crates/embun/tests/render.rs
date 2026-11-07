@@ -107,3 +107,26 @@ fn glass_shows_the_content_behind_it_frosted() {
     assert!(bright - dark < 120, "stripes under glass should be softened: {dark} vs {bright}");
     assert!(bright - dark > 0, "the glass should still show the stripes faintly: {dark} vs {bright}");
 }
+
+#[test]
+fn menu_glass_frosts_the_glass_beneath_it() {
+    let gpu = gpu();
+    // A blue prominent button, and a menu whose left half covers it.
+    let view = |_: &Theme| {
+        div()
+            .child(div().absolute().top(30.0).left(20.0).child(button("Save").size(ControlSize::ExtraLarge).prominent()))
+            .child(popover((), menu().absolute().top(20.0).left(40.0).w(140.0).h(60.0)))
+    };
+    let with_menu = render(gpu, Theme::default(), view);
+    let without = render(gpu, Theme::default(), |_| {
+        div().child(div().absolute().top(30.0).left(20.0).child(button("Save").size(ControlSize::ExtraLarge).prominent()))
+    });
+    // Outside the menu, the button looks the same either way.
+    assert_eq!(with_menu(25, 48), without(25, 48));
+    // Inside the menu over the button, the blue shows through the frost.
+    let [r, _, b] = with_menu(60, 48);
+    assert!(b as i32 - r as i32 > 40, "menu over the button should be bluish, got {:?}", with_menu(60, 48));
+    // Inside the menu away from the button, it is not.
+    let [r, _, b] = with_menu(170, 70);
+    assert!((b as i32 - r as i32).abs() < 20, "menu away from the button should be neutral, got {:?}", with_menu(170, 70));
+}

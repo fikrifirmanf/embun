@@ -59,11 +59,15 @@ struct GpuImage {
 /// created for.
 pub struct Renderer {
     glass: GlassRenderer,
+    /// Draws the base glass into the overlay backdrop when an overlay is open.
+    glass_offscreen: GlassRenderer,
     backdrop: Option<Backdrop>,
     backdrop_view: Option<wgpu::TextureView>,
+    /// The finished base frame, which overlay glass frosts.
+    overlay_backdrop: Option<(Backdrop, wgpu::TextureView)>,
     content_hash: Option<u64>,
-    content: Layer,
-    foreground: Layer,
+    /// Indexed by [`Which`].
+    layers: Vec<Layer>,
     image_layout: wgpu::BindGroupLayout,
     image_sampler: wgpu::Sampler,
     images: HashMap<u64, GpuImage>,
@@ -176,11 +180,12 @@ impl Renderer {
         };
         Self {
             glass: GlassRenderer::new(device, format),
+            glass_offscreen: GlassRenderer::new(device, Backdrop::FORMAT),
             backdrop: None,
             backdrop_view: None,
+            overlay_backdrop: None,
             content_hash: None,
-            content: layer(Backdrop::FORMAT),
-            foreground: layer(format),
+            layers: [Backdrop::FORMAT, format, Backdrop::FORMAT, Backdrop::FORMAT, format].map(layer).into(),
             image_layout,
             image_sampler: device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("embun image"),
@@ -224,7 +229,7 @@ impl Renderer {
             self.content_hash = None;
         }
 
-        // Every quad of both layers goes into one instance buffer.
+        // Every quad of every layer goes into one instance buffer.
         let mut quads = Vec::new();
         let hash = content_hash(scene);
         let redraw_content = self.content_hash != Some(hash);
@@ -233,8 +238,14 @@ impl Renderer {
         } else {
             None
         };
-        let foreground_batches =
-            self.prepare(device, queue, Which::Foreground, &scene.foreground, scale_factor, size, text, &mut quads);
+        let overlay = scene.overlay.as_ref();
+        let base_labels = if overlay.is_some() { Which::BaseOffscreen } else { Which::Foreground };
+        let foreground_batches = self.prepare(device, queue, base_labels, &scene.foreground, scale_factor, size, text, &mut quads);
+        let overlay_batches = overlay.map(|o| {
+            let content = self.prepare(device, queue, Which::OverlayContent, &o.content, scale_factor, size, text, &mut quads);
+            let labels = self.prepare(device, queue, Which::OverlayForeground, &o.foreground, scale_factor, size, text, &mut quads);
+            (content, labels)
+        });
         self.upload_quads(device, queue, &quads);
 
         let backdrop = self.backdrop.as_ref().expect("backdrop");
@@ -249,7 +260,7 @@ impl Renderer {
             {
                 let view = self.backdrop_view.as_ref().expect("backdrop view");
                 let mut pass = begin(encoder, view, wgpu::LoadOp::Clear(clear));
-                draw(&mut pass, &self.content, &batches, self.quad_buffer.as_ref(), &self.images);
+                draw(&mut pass, &self.layers[Which::Content as usize], &batches, self.quad_buffer.as_ref(), &self.images);
             }
             self.glass.regenerate_mips(encoder, backdrop);
             self.content_hash = Some(hash);
@@ -264,13 +275,40 @@ impl Renderer {
             shapes: &scene.glass,
             params: theme.glass(),
         };
-        self.glass.render(queue, encoder, target, backdrop, &frame);
-        {
+        if let (Some(o), Some((overlay_content, overlay_labels))) = (overlay, overlay_batches) {
+            // Finish the base frame offscreen, add the overlay's own content,
+            // and let the overlay glass frost all of it.
+            if self.overlay_backdrop.as_ref().map(|(b, _)| b.size()) != Some(size) {
+                let blank = vec![0u8; size[0] as usize * size[1] as usize * 4];
+                let b = self.glass_offscreen.create_backdrop(device, queue, &blank, size[0], size[1]);
+                let view = b.texture().create_view(&wgpu::TextureViewDescriptor {
+                    base_mip_level: 0,
+                    mip_level_count: Some(1),
+                    ..Default::default()
+                });
+                self.overlay_backdrop = Some((b, view));
+            }
+            let (overlay_backdrop, overlay_view) = self.overlay_backdrop.as_ref().expect("overlay backdrop");
+            self.glass_offscreen.render(queue, encoder, overlay_view, backdrop, &frame);
+            {
+                let mut pass = begin(encoder, overlay_view, wgpu::LoadOp::Load);
+                let quads = self.quad_buffer.as_ref();
+                draw(&mut pass, &self.layers[Which::BaseOffscreen as usize], &foreground_batches, quads, &self.images);
+                draw(&mut pass, &self.layers[Which::OverlayContent as usize], &overlay_content, quads, &self.images);
+            }
+            self.glass_offscreen.regenerate_mips(encoder, overlay_backdrop);
+            let overlay_frame = Frame { shapes: &o.glass, ..frame };
+            self.glass.render(queue, encoder, target, overlay_backdrop, &overlay_frame);
             let mut pass = begin(encoder, target, wgpu::LoadOp::Load);
-            draw(&mut pass, &self.foreground, &foreground_batches, self.quad_buffer.as_ref(), &self.images);
+            draw(&mut pass, &self.layers[Which::OverlayForeground as usize], &overlay_labels, self.quad_buffer.as_ref(), &self.images);
+        } else {
+            self.glass.render(queue, encoder, target, backdrop, &frame);
+            let mut pass = begin(encoder, target, wgpu::LoadOp::Load);
+            draw(&mut pass, &self.layers[Which::Foreground as usize], &foreground_batches, self.quad_buffer.as_ref(), &self.images);
         }
-        self.content.atlas.trim();
-        self.foreground.atlas.trim();
+        for layer in &mut self.layers {
+            layer.atlas.trim();
+        }
         let frame = self.frame;
         self.images.retain(|_, image| frame - image.used < 120);
         text.end_frame();
@@ -298,10 +336,7 @@ impl Renderer {
                 entry.used = frame;
             }
         }
-        let layer = match which {
-            Which::Content => &mut self.content,
-            Which::Foreground => &mut self.foreground,
-        };
+        let layer = &mut self.layers[which as usize];
         let globals = Globals { size: [size[0] as f32, size[1] as f32], output_gamma: layer.output_gamma as u32 as f32, _pad: 0.0 };
         queue.write_buffer(&layer.globals, 0, bytemuck::bytes_of(&globals));
         layer.viewport.update(queue, Resolution { width: size[0], height: size[1] });
@@ -471,10 +506,19 @@ pub fn snapshot<A: crate::App>(
     (pixels, width, height)
 }
 
+/// The layers a frame can draw, each with pipelines for its target format.
 #[derive(Clone, Copy)]
 enum Which {
+    /// Into the backdrop.
     Content,
+    /// Onto the window, over the glass.
     Foreground,
+    /// The same, into the overlay backdrop when an overlay is open.
+    BaseOffscreen,
+    /// An overlay's own content, into the overlay backdrop.
+    OverlayContent,
+    /// Onto the window, over the overlay glass.
+    OverlayForeground,
 }
 
 fn begin<'e>(encoder: &'e mut wgpu::CommandEncoder, view: &wgpu::TextureView, load: wgpu::LoadOp<wgpu::Color>) -> wgpu::RenderPass<'e> {

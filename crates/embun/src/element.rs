@@ -40,6 +40,8 @@ pub enum Role {
     Heading,
     Image,
     TextField,
+    Menu,
+    MenuItem,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -124,6 +126,8 @@ pub(crate) struct Style {
     pub border: Option<(f32, Color)>,
     pub glass: Option<Glass>,
     pub scroll_y: bool,
+    /// Draws above everything else, including glass, which it frosts.
+    pub overlay: bool,
     pub font_size: Option<f32>,
     pub font_weight: Option<u16>,
     pub text_color: Option<Color>,
@@ -521,6 +525,16 @@ impl<M> Element<M> {
     /// The same offset on all four sides.
     pub fn inset(mut self, px: f32) -> Self {
         self.style.inset = [Some(px); 4];
+        self
+    }
+
+    /// Lifts the element and its children above everything else, glass
+    /// included: glass inside it frosts the finished window beneath, so a
+    /// menu over a toolbar shows the toolbar through it. Also makes the
+    /// element absolute; place it with `top`, `left` and friends.
+    pub fn overlay(mut self) -> Self {
+        self.style.overlay = true;
+        self.style.absolute = true;
         self
     }
 

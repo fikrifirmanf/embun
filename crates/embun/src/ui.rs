@@ -87,6 +87,8 @@ struct Target {
     clip: Rect4,
     /// Glass and what sits on it draw over the content, so they are hit first.
     on_top: bool,
+    /// Overlays draw over everything, so they are hit before anything else.
+    overlay: bool,
     press: Option<u64>,
     scroll: Option<u64>,
     input: bool,
@@ -114,6 +116,8 @@ pub struct Ui<A: App> {
     pressed: Option<u64>,
     focused: Option<u64>,
     edit: Option<Edit>,
+    /// The topmost overlay with an `on_press`: Escape and clicks outside it send its message.
+    dismiss: Option<u64>,
     access: Vec<AccessNode>,
     highlight: HashMap<u64, (Animated, Animated)>,
     scene: Scene,
@@ -142,6 +146,7 @@ impl<A: App> Ui<A> {
             pressed: None,
             focused: None,
             edit: None,
+            dismiss: None,
             access: Vec::new(),
             highlight: HashMap::new(),
             scene: Scene::default(),
@@ -205,6 +210,7 @@ impl<A: App> Ui<A> {
 
         self.targets.clear();
         self.messages.clear();
+        self.dismiss = None;
         self.focus_order.clear();
         let mut press_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
         let mut scroll_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
@@ -215,10 +221,17 @@ impl<A: App> Ui<A> {
             }
             let press = if let Some(m) = &n.el.on_press {
                 self.messages.insert(n.id, m.clone());
-                if n.el.role == Role::Button {
+                if matches!(n.el.role, Role::Button | Role::MenuItem) {
                     self.focus_order.push(n.id);
                 }
+                if n.el.style.overlay {
+                    self.dismiss = Some(n.id);
+                }
                 Some(n.id)
+            } else if n.el.style.glass.is_some() {
+                // A click on a glass panel's empty space stays on the panel
+                // instead of reaching whatever is behind it.
+                None
             } else {
                 inherited(&press_of)
             };
@@ -230,6 +243,7 @@ impl<A: App> Ui<A> {
                 rect: n.rect,
                 clip: n.clip,
                 on_top: n.on_glass.is_some() || n.el.style.glass.is_some(),
+                overlay: n.in_overlay,
                 press,
                 scroll,
                 input: n.el.on_input.is_some(),
@@ -499,7 +513,7 @@ impl<A: App> Ui<A> {
             .iter()
             .enumerate()
             .filter(|(_, t)| layout::contains(t.rect, p) && layout::contains(t.clip, p))
-            .max_by_key(|(i, t)| (t.on_top, *i))
+            .max_by_key(|(i, t)| (t.overlay, t.on_top, *i))
             .map(|(_, t)| t)
     }
 
@@ -516,6 +530,7 @@ impl<A: App> Ui<A> {
 
     /// The pointer moved to `p`, in logical pixels.
     pub fn pointer_moved(&mut self, p: [f32; 2]) {
+        self.update();
         self.pointer = Some(p);
         let hovered = self.hit(p).and_then(|t| t.press);
         if hovered != self.hovered {
@@ -542,6 +557,7 @@ impl<A: App> Ui<A> {
     }
 
     pub fn pointer_pressed(&mut self) {
+        self.update();
         let Some(p) = self.pointer else { return };
         let hit = self.hit(p).cloned();
         if let Some(t) = hit.as_ref().filter(|t| t.input) {
@@ -566,6 +582,7 @@ impl<A: App> Ui<A> {
 
     /// Releasing over the control that was pressed activates it.
     pub fn pointer_released(&mut self) {
+        self.update();
         let Some(id) = self.pressed.take() else { return };
         self.animate(id, Some(0.0), None);
         let over = self.pointer.and_then(|p| self.hit(p)).and_then(|t| t.press) == Some(id);
@@ -577,6 +594,7 @@ impl<A: App> Ui<A> {
     /// Scrolls the innermost scroll container under the pointer by `delta`
     /// logical pixels (positive moves the content up).
     pub fn scrolled(&mut self, delta: f32) {
+        self.update();
         let Some(p) = self.pointer else { return };
         let Some(id) = self.hit(p).and_then(|t| t.scroll) else { return };
         let max = self.scroll_info.get(&id).map_or(0.0, |s| s.max);
@@ -589,6 +607,8 @@ impl<A: App> Ui<A> {
     }
 
     pub fn key(&mut self, key: Key) {
+        // Act on the UI as it is now, not as it was at the last frame.
+        self.update();
         match key {
             Key::Tab | Key::ShiftTab => {
                 if self.focus_order.is_empty() {
@@ -620,7 +640,10 @@ impl<A: App> Ui<A> {
                 }
             }
             Key::Escape => {
-                if self.focused.is_some() {
+                if let Some(message) = self.dismiss.and_then(|id| self.messages.get(&id).cloned()) {
+                    self.focus(None);
+                    self.send(message);
+                } else if self.focused.is_some() {
                     self.focus(None);
                 }
             }
@@ -699,6 +722,8 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
                 Role::Heading => R::Heading,
                 Role::Image => R::Image,
                 Role::TextField => R::TextInput,
+                Role::Menu => R::Menu,
+                Role::MenuItem => R::MenuItem,
                 Role::Generic if el.style.scroll_y => R::ScrollView,
                 Role::Generic => R::GenericContainer,
             };
@@ -1011,6 +1036,99 @@ mod tests {
                 .child(crate::button("Save").on_press(LibraryMsg::Save))
                 .child(crate::text_input(self.title.clone(), LibraryMsg::Title).placeholder("Title"))
         }
+    }
+
+    struct Menus {
+        open: bool,
+        picked: Vec<&'static str>,
+        under: u32,
+    }
+
+    #[derive(Clone)]
+    enum MenuMsg {
+        Open,
+        Close,
+        Pick(&'static str),
+        Under,
+    }
+
+    impl App for Menus {
+        type Message = MenuMsg;
+        fn update(&mut self, m: MenuMsg) {
+            match m {
+                MenuMsg::Open => self.open = true,
+                MenuMsg::Close => self.open = false,
+                MenuMsg::Pick(p) => {
+                    self.picked.push(p);
+                    self.open = false;
+                }
+                MenuMsg::Under => self.under += 1,
+            }
+        }
+        fn view(&self, _: &Theme) -> Element<MenuMsg> {
+            let mut root = column()
+                .p_4()
+                .gap_2()
+                .child(div().key("open").h(30.0).on_press(MenuMsg::Open))
+                .child(div().key("under").h(60.0).on_press(MenuMsg::Under));
+            if self.open {
+                let panel = crate::menu()
+                    .key("panel")
+                    .absolute()
+                    .top(50.0)
+                    .left(16.0)
+                    .child(crate::menu_item("Copy", MenuMsg::Pick("copy")).key("copy"))
+                    .child(crate::menu_item("Paste", MenuMsg::Pick("paste")).key("paste"));
+                root = root.child(crate::popover(MenuMsg::Close, panel));
+            }
+            root
+        }
+    }
+
+    fn menus() -> Ui<Menus> {
+        let mut ui = Ui::new(Menus { open: false, picked: vec![], under: 0 }, Theme::default(), [300.0, 200.0]);
+        let open = ui.rect_of_key("open").expect("open");
+        let p = center(open);
+        ui.pointer_moved(p);
+        ui.pointer_pressed();
+        ui.pointer_released();
+        assert!(ui.app().open);
+        ui
+    }
+
+    fn click_at<A: App>(ui: &mut Ui<A>, p: [f32; 2]) {
+        ui.pointer_moved(p);
+        ui.pointer_pressed();
+        ui.pointer_released();
+    }
+
+    #[test]
+    fn menu_items_take_clicks_before_controls_under_them() {
+        let mut ui = menus();
+        assert!(ui.scene().overlay.as_ref().is_some_and(|o| o.glass.len() == 1), "the menu is overlay glass");
+        let copy = ui.rect_of_key("copy").expect("copy item");
+        let under = ui.rect_of_key("under").expect("control under the menu");
+        assert!(crate::layout::contains(under, center(copy)), "the item should sit over the other control");
+        click_at(&mut ui, center(copy));
+        assert_eq!(ui.app().picked, ["copy"]);
+        assert_eq!(ui.app().under, 0);
+        assert!(!ui.app().open);
+        assert!(ui.scene().overlay.is_none());
+    }
+
+    #[test]
+    fn popovers_close_on_outside_clicks_and_escape_but_not_on_the_panel() {
+        let mut ui = menus();
+        let panel = ui.rect_of_key("panel").expect("panel");
+        // The panel's padding, between items: stays open.
+        click_at(&mut ui, [panel[0] + 2.0, panel[1] + 2.0]);
+        assert!(ui.app().open, "clicking the panel itself must not dismiss");
+        click_at(&mut ui, [290.0, 190.0]);
+        assert!(!ui.app().open, "clicking outside dismisses");
+        assert_eq!(ui.app().under, 0, "the outside click does not reach the controls");
+        let mut ui = menus();
+        ui.key(Key::Escape);
+        assert!(!ui.app().open, "Escape dismisses");
     }
 
     #[test]

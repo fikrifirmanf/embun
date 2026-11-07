@@ -2,7 +2,7 @@
 
 Embun is a Rust UI toolkit built on wgpu. It draws translucent glass controls that match the look of macOS 27, on any platform wgpu runs on. Embun is Indonesian for dew.
 
-**Status: early.** The glass renderer, the spring animations and a first version of the framework work: windows, layout, text, single-line text fields, images, glass buttons, toolbars and sidebars. Screen readers work through AccessKit. Menus and popovers are not written yet.
+**Status: early.** The glass renderer, the spring animations and a first version of the framework work: windows, layout, text, single-line text fields, images, glass buttons, toolbars, sidebars and menus. Menus and popovers draw glass over glass, and screen readers work through AccessKit. Multi-line text editing is not written yet.
 
 | Crate | What it does |
 |---|---|

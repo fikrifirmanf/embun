@@ -21,6 +21,8 @@ pub(crate) struct Node<'a, M> {
     pub color: Color,
     /// The nearest glass ancestor, whose surface this element sits on.
     pub on_glass: Option<usize>,
+    /// The element or an ancestor is an overlay.
+    pub in_overlay: bool,
     /// Border box in window coordinates, after scrolling.
     pub rect: Rect4,
     /// What is visible of it: the window, cut by any scrolling ancestors.
@@ -37,13 +39,20 @@ pub(crate) fn flatten<'a, M>(root: &'a Element<M>, theme: &Theme) -> Vec<Node<'a
 }
 
 fn visit<'a, M>(el: &'a Element<M>, parent: Option<usize>, index: usize, nodes: &mut Vec<Node<'a, M>>, theme: &Theme) {
-    let (text, color, on_glass, parent_id) = match parent {
+    let (text, color, on_glass, parent_id, parent_overlay) = match parent {
         Some(p) => {
             let n = &nodes[p];
-            let on_glass = if n.el.style.glass.is_some() { Some(p) } else { n.on_glass };
-            (n.text.clone(), n.color, on_glass, n.id)
+            // An overlay starts a new stack: glass under it is not "its" glass.
+            let on_glass = if el.style.overlay {
+                None
+            } else if n.el.style.glass.is_some() {
+                Some(p)
+            } else {
+                n.on_glass
+            };
+            (n.text.clone(), n.color, on_glass, n.id, n.in_overlay)
         }
-        None => (DEFAULT_TEXT, theme.label(), None, 0x656d_6275_6e00),
+        None => (DEFAULT_TEXT, theme.label(), None, 0x656d_6275_6e00, false),
     };
     let s = &el.style;
     let text = TextStyle {
@@ -67,6 +76,7 @@ fn visit<'a, M>(el: &'a Element<M>, parent: Option<usize>, index: usize, nodes: 
         text,
         color: s.text_color.unwrap_or(color),
         on_glass,
+        in_overlay: parent_overlay || el.style.overlay,
         rect: [0.0; 4],
         clip: [0.0; 4],
     });
