@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text and images · Embun</title>
+<meta name="description" content="Embun is a Rust UI toolkit with glass controls that match macOS 27, drawn with wgpu.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3c5 7 9 11 9 16a9 9 0 0 1-18 0c0-5 4-9 9-16z' fill='%230a60d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script>
+  try {
+    var saved = localStorage.getItem("embun-theme");
+    if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="./">Embun</a>
+  <div class="search">
+    <label class="sr" for="q">Search the docs</label>
+    <input id="q" type="search" placeholder="Search" autocomplete="off" aria-controls="results">
+    <ul id="results" hidden></ul>
+  </div>
+  <nav class="links" aria-label="Project">
+    <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
+    <a href="https://docs.rs/embun">API reference</a>
+    <a href="https://crates.io/crates/embun">crates.io</a>
+  </nav>
+  <button class="mode" type="button" id="mode" aria-label="Switch between light and dark previews">
+    <span class="mode-light">Light</span><span class="mode-dark">Dark</span>
+  </button>
+</header>
+<div class="shell">
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html" aria-current="page">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
+  <main id="main">
+    <h1>Text and images</h1>
+    <p>Text is set in Inter, which is embedded in the library, so it measures the same on every machine. Embun does not use Apple's fonts. Set <code>Settings::system_fonts(true)</code> to also load installed fonts, which you need for emoji and for scripts Inter does not cover.</p>
+
+<h2 id="size-weight-and-color">Size, weight and color</h2>
+<p><code>text_xs</code> up to <code>text_4xl</code> set common sizes, and <code>text_size</code> takes any size in pixels. <code>font_medium</code>, <code>font_semibold</code> and <code>font_bold</code> set the weight. Size, weight and color are inherited, so set them on a parent to style everything inside it.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/text_styles-light.png" alt="Four lines of text from a large bold title down to a small caption" width="380" height="180"><img class="dark" src="img/text_styles-dark.png" alt="Four lines of text from a large bold title down to a small caption" width="380" height="180"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">text_styles</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">column</span>()
+        .<span class="f">gap_1</span>()
+        .<span class="f">items_start</span>()
+        .<span class="f">child</span>(<span class="f">text</span>(<span class="s">&quot;Large title&quot;</span>).<span class="f">text_3xl</span>().<span class="f">font_bold</span>())
+        .<span class="f">child</span>(<span class="f">text</span>(<span class="s">&quot;Headline&quot;</span>).<span class="f">text_xl</span>().<span class="f">font_semibold</span>())
+        .<span class="f">child</span>(<span class="f">text</span>(<span class="s">&quot;Body text at the base size.&quot;</span>))
+        .<span class="f">child</span>(<span class="f">text</span>(<span class="s">&quot;Caption in secondary color&quot;</span>).<span class="f">text_xs</span>().<span class="f">text_color</span>(theme.<span class="f">secondary_label</span>()))
+}</code></pre></figure>
+
+<h2 id="wrapping-and-alignment">Wrapping and alignment</h2>
+<p>Text wraps at the width of its box. <code>text_center</code> and <code>text_right</code> align the lines, and <code>leading</code> sets the line height as a multiple of the font size.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/text_wrapping-light.png" alt="A centered paragraph wrapped to three lines" width="380" height="150"><img class="dark" src="img/text_wrapping-dark.png" alt="A centered paragraph wrapped to three lines" width="380" height="150"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">text_wrapping</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">text</span>(<span class="s">&quot;Text wraps at the width you give it, and leading sets the line height as a multiple of the size.&quot;</span>)
+        .<span class="f">w</span>(<span class="n">260.0</span>)
+        .<span class="f">text_center</span>()
+        .<span class="f">leading</span>(<span class="n">1.5</span>)
+}</code></pre></figure>
+
+<h2 id="images">Images</h2>
+<p><code>Image::from_rgba</code> takes raw pixels. <code>Image::open</code> and <code>Image::from_bytes</code> read PNG and JPEG, and return an <code>ImageError</code> that names the file and the problem. Set <code>w</code> or <code>h</code> to scale an image, and <code>rounded</code> to clip its corners. When you set only one of them, the aspect ratio is kept.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/image_scaled-light.png" alt="A rounded square image with a red, green and blue gradient" width="380" height="180"><img class="dark" src="img/image_scaled-dark.png" alt="A rounded square image with a red, green and blue gradient" width="380" height="180"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">image_scaled</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="k">let</span> pixels: <span class="t">Vec</span>&lt;u8&gt; = (<span class="n">0..64</span> * <span class="n">64u32</span>).<span class="f">flat_map</span>(|i| [((i % <span class="n">64</span>) * <span class="n">4</span>) <span class="k">as</span> u8, ((i / <span class="n">64</span>) * <span class="n">4</span>) <span class="k">as</span> u8, <span class="n">160</span>, <span class="n">255</span>]).<span class="f">collect</span>();
+    <span class="f">image</span>(<span class="t">Image</span>::<span class="f">from_rgba</span>(<span class="n">64</span>, <span class="n">64</span>, pixels)).<span class="f">w</span>(<span class="n">120.0</span>).<span class="f">h</span>(<span class="n">120.0</span>).<span class="f">rounded</span>(<span class="n">16.0</span>)
+}</code></pre></figure>
+<pre class="code" tabindex="0"><code><span class="k">let</span> photo = <span class="t">Image</span>::<span class="f">open</span>(<span class="s">&quot;photo.jpg&quot;</span>)?;
+<span class="f">image</span>(photo).<span class="f">w</span>(<span class="n">200.0</span>).<span class="f">rounded</span>(<span class="n">10.0</span>)</code></pre>
+
+  </main>
+</div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    function current() {
+      return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    }
+    var input = document.getElementById("q"), results = document.getElementById("results"), index = null;
+    function load(then) {
+      if (index) return then();
+      fetch("search.json").then(function (r) { return r.json(); }).then(function (data) { index = data; then(); }).catch(function () {});
+    }
+    function show() {
+      var terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      results.textContent = "";
+      if (!terms.length || !index) { results.hidden = true; return; }
+      var hits = [];
+      index.forEach(function (e) {
+        var heading = (e.heading || e.page).toLowerCase(), all = heading + " " + e.text.toLowerCase();
+        if (terms.every(function (t) { return all.indexOf(t) >= 0; })) {
+          hits.push({ e: e, score: terms.filter(function (t) { return heading.indexOf(t) >= 0; }).length });
+        }
+      });
+      hits.sort(function (a, b) { return b.score - a.score; });
+      hits.slice(0, 8).forEach(function (h) {
+        var li = document.createElement("li"), a = document.createElement("a"), t = document.createElement("span"), p = document.createElement("span");
+        a.href = h.e.href;
+        t.className = "r-title"; t.textContent = h.e.heading || h.e.page;
+        p.className = "r-page"; p.textContent = h.e.heading ? h.e.page : "Page";
+        a.append(t, p); li.append(a); results.append(li);
+      });
+      if (!hits.length) {
+        var none = document.createElement("li"); none.className = "none"; none.textContent = "No results"; results.append(none);
+      }
+      results.hidden = false;
+    }
+    input.addEventListener("focus", function () { load(show); });
+    input.addEventListener("input", function () { load(show); });
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { input.value = ""; show(); }
+      if (ev.key === "ArrowDown") { var a = results.querySelector("a"); if (a) { a.focus(); ev.preventDefault(); } }
+      if (ev.key === "Enter") { var f = results.querySelector("a"); if (f) location.href = f.href; }
+    });
+    results.addEventListener("keydown", function (ev) {
+      var a = document.activeElement;
+      if (ev.key === "ArrowDown" && a.parentNode.nextElementSibling) { a.parentNode.nextElementSibling.querySelector("a").focus(); ev.preventDefault(); }
+      if (ev.key === "ArrowUp") { var prev = a.parentNode.previousElementSibling; (prev ? prev.querySelector("a") : input).focus(); ev.preventDefault(); }
+      if (ev.key === "Escape") { input.focus(); input.value = ""; show(); }
+    });
+    document.addEventListener("click", function (ev) { if (!ev.target.closest(".search")) results.hidden = true; });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { ev.preventDefault(); input.focus(); }
+    });
+    document.getElementById("mode").addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("embun-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>

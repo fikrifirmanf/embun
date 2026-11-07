@@ -1,0 +1,28 @@
+<p>Embun lays elements out with flexbox, through <a href="https://crates.io/crates/taffy">taffy</a>. <code>row</code> places children left to right, and <code>column</code> (or <code>div</code>) stacks them top to bottom. Sizes are in logical pixels, and spacing methods count in steps of 4 px: <code>p_3</code> is 12 px of padding, <code>gap_2</code> is 8 px.</p>
+
+<h2>Rows and columns</h2>
+<p>Put rows in columns and columns in rows. <code>gap_*</code> spaces the children, <code>p_*</code>, <code>px_*</code> and <code>py_*</code> pad them, and <code>items_*</code> and <code>justify_*</code> align them across and along the direction.</p>
+{{example layout_stack}}
+
+<h2>Growing and fixed sizes</h2>
+<p><code>w</code>, <code>h</code> and <code>size</code> set pixels, <code>w_full</code> and <code>h_full</code> fill the parent, and <code>grow</code> takes the space left over. <code>spacer()</code> is an empty element that grows, which pushes siblings apart.</p>
+{{example layout_grow}}
+
+<h2>Wrapping</h2>
+<p><code>flex_wrap</code> on a row moves children that do not fit onto the next line.</p>
+{{example layout_wrap}}
+
+<h2>Absolute positioning</h2>
+<p><code>absolute</code> takes an element out of the flow and places it from its parent's edges with <code>top</code>, <code>right</code>, <code>bottom</code> and <code>left</code>. <code>inset(0.0)</code> stretches it over the whole parent.</p>
+{{example layout_absolute}}
+
+<h2>Scrolling</h2>
+<p><code>scroll_y</code> makes a container scroll vertically when its children are taller than it. For long lists use <a href="lists.html"><code>list</code></a>, which builds only the visible rows.</p>
+
+<h2>Surfaces and borders</h2>
+<p><code>bg</code> fills with a color, <code>rounded</code> and the <code>rounded_*</code> sizes round the corners, and <code>border</code> draws an outline. Take colors from the <a href="theme.html">theme</a> so they follow light and dark mode.</p>
+{{example style_card}}
+
+<h2>Gradients</h2>
+<p><code>bg_gradient(top, bottom)</code> blends two colors from top to bottom.</p>
+{{example style_gradient}}

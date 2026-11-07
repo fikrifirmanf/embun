@@ -18,6 +18,11 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <a class="brand" href="./">Embun</a>
+  <div class="search">
+    <label class="sr" for="q">Search the docs</label>
+    <input id="q" type="search" placeholder="Search" autocomplete="off" aria-controls="results">
+    <ul id="results" hidden></ul>
+  </div>
   <nav class="links" aria-label="Project">
     <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
     <a href="https://docs.rs/embun">API reference</a>
@@ -28,12 +33,12 @@
   </button>
 </header>
 <div class="shell">
-  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="buttons.html" aria-current="page">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li></ul></nav>
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html" aria-current="page">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
   <main id="main">
     <h1>Buttons and toolbars</h1>
     <p>Buttons are glass. They frost whatever is behind them, so they look right over a photo, a gradient or your own content, and they are less useful over a flat color. Every example on this site is drawn by Embun's own renderer.</p>
 
-<h2>Button</h2>
+<h2 id="button">Button</h2>
 <p><code>button</code> takes a label. <code>on_press</code> sets the message to send. <code>prominent</code> tints it with the accent color for the main action in a view.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/button_basic-light.png" alt="A Cancel button and a blue Save button over a landscape" width="360" height="140"><img class="dark" src="img/button_basic-dark.png" alt="A Cancel button and a blue Save button over a landscape" width="360" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">button_basic</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">row</span>()
@@ -42,7 +47,7 @@
         .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Save&quot;</span>).<span class="f">prominent</span>().<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Save</span>))
 }</code></pre></figure>
 
-<h2>Sizes</h2>
+<h2 id="sizes">Sizes</h2>
 <p><code>ControlSize</code> has four sizes: <code>Small</code>, <code>Regular</code> (the default), <code>Large</code> and <code>ExtraLarge</code>. Their heights follow the buttons in macOS 27.0.1.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/button_sizes-light.png" alt="Four buttons from Small to Extra large" width="640" height="140"><img class="dark" src="img/button_sizes-dark.png" alt="Four buttons from Small to Extra large" width="640" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">button_sizes</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">row</span>()
@@ -54,7 +59,7 @@
         .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Extra large&quot;</span>).<span class="f">size</span>(<span class="t">ControlSize</span>::<span class="t">ExtraLarge</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Save</span>))
 }</code></pre></figure>
 
-<h2>Icon buttons</h2>
+<h2 id="icon-buttons">Icon buttons</h2>
 <p>An icon button is round and shows a glyph. Give it a <code>label</code>, because a screen reader has nothing else to read out.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/icon_buttons-light.png" alt="Three round buttons: plus, minus and a blue close button" width="360" height="140"><img class="dark" src="img/icon_buttons-dark.png" alt="Three round buttons: plus, minus and a blue close button" width="360" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">icon_buttons</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">row</span>()
@@ -64,7 +69,7 @@
         .<span class="f">child</span>(<span class="f">icon_button</span>(<span class="s">&quot;×&quot;</span>).<span class="f">prominent</span>().<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Cancel</span>).<span class="f">label</span>(<span class="s">&quot;Close&quot;</span>))
 }</code></pre></figure>
 
-<h2>Toolbar</h2>
+<h2 id="toolbar">Toolbar</h2>
 <p><code>toolbar_group</code> joins its items into one glass pill, the way macOS groups back and forward. Put other buttons beside it.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/toolbar-light.png" alt="A pair of back and forward buttons beside a blue Share button" width="420" height="140"><img class="dark" src="img/toolbar-dark.png" alt="A pair of back and forward buttons beside a blue Share button" width="420" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">toolbar</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">row</span>()
@@ -78,7 +83,7 @@
         .<span class="f">child</span>(<span class="f">button</span>(<span class="s">&quot;Share&quot;</span>).<span class="f">size</span>(<span class="t">ControlSize</span>::<span class="t">Large</span>).<span class="f">prominent</span>().<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Share</span>))
 }</code></pre></figure>
 
-<h2>Sidebar</h2>
+<h2 id="sidebar">Sidebar</h2>
 <p><code>sidebar</code> is a glass panel with a heading and rows. Pass <code>true</code> to <code>sidebar_item</code> for the selected row. Give each row a <code>key</code> so Embun keeps its hover and press state when the list changes.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/sidebar_list-light.png" alt="A glass sidebar with a Library heading and three albums, All Photos selected" width="420" height="260"><img class="dark" src="img/sidebar_list-dark.png" alt="A glass sidebar with a Library heading and three albums, All Photos selected" width="420" height="260"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">sidebar_list</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">sidebar</span>()
@@ -99,6 +104,52 @@
     function current() {
       return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     }
+    var input = document.getElementById("q"), results = document.getElementById("results"), index = null;
+    function load(then) {
+      if (index) return then();
+      fetch("search.json").then(function (r) { return r.json(); }).then(function (data) { index = data; then(); }).catch(function () {});
+    }
+    function show() {
+      var terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      results.textContent = "";
+      if (!terms.length || !index) { results.hidden = true; return; }
+      var hits = [];
+      index.forEach(function (e) {
+        var heading = (e.heading || e.page).toLowerCase(), all = heading + " " + e.text.toLowerCase();
+        if (terms.every(function (t) { return all.indexOf(t) >= 0; })) {
+          hits.push({ e: e, score: terms.filter(function (t) { return heading.indexOf(t) >= 0; }).length });
+        }
+      });
+      hits.sort(function (a, b) { return b.score - a.score; });
+      hits.slice(0, 8).forEach(function (h) {
+        var li = document.createElement("li"), a = document.createElement("a"), t = document.createElement("span"), p = document.createElement("span");
+        a.href = h.e.href;
+        t.className = "r-title"; t.textContent = h.e.heading || h.e.page;
+        p.className = "r-page"; p.textContent = h.e.heading ? h.e.page : "Page";
+        a.append(t, p); li.append(a); results.append(li);
+      });
+      if (!hits.length) {
+        var none = document.createElement("li"); none.className = "none"; none.textContent = "No results"; results.append(none);
+      }
+      results.hidden = false;
+    }
+    input.addEventListener("focus", function () { load(show); });
+    input.addEventListener("input", function () { load(show); });
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { input.value = ""; show(); }
+      if (ev.key === "ArrowDown") { var a = results.querySelector("a"); if (a) { a.focus(); ev.preventDefault(); } }
+      if (ev.key === "Enter") { var f = results.querySelector("a"); if (f) location.href = f.href; }
+    });
+    results.addEventListener("keydown", function (ev) {
+      var a = document.activeElement;
+      if (ev.key === "ArrowDown" && a.parentNode.nextElementSibling) { a.parentNode.nextElementSibling.querySelector("a").focus(); ev.preventDefault(); }
+      if (ev.key === "ArrowUp") { var prev = a.parentNode.previousElementSibling; (prev ? prev.querySelector("a") : input).focus(); ev.preventDefault(); }
+      if (ev.key === "Escape") { input.focus(); input.value = ""; show(); }
+    });
+    document.addEventListener("click", function (ev) { if (!ev.target.closest(".search")) results.hidden = true; });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { ev.preventDefault(); input.focus(); }
+    });
     document.getElementById("mode").addEventListener("click", function () {
       var next = current() === "dark" ? "light" : "dark";
       root.dataset.theme = next;

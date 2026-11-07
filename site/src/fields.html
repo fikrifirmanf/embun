@@ -1,0 +1,29 @@
+<p>Text fields show the value your app owns. When the user types, Embun calls the function you passed and sends your <code>update</code> the new text. You store it, and the next <code>view</code> passes it back in.</p>
+
+<h2>Single line</h2>
+<p><code>text_input(value, on_change)</code> is 28 px tall and 200 px wide until you set <code>w</code>, <code>h</code> or <code>grow</code>. <code>placeholder</code> shows hint text while the field is empty, and <code>label</code> gives it a name for screen readers, since a placeholder is not a label.</p>
+{{example field_single}}
+{{rust}}
+fn update(&mut self, message: Msg) {
+    match message {
+        Msg::Text(text) => self.name = text,
+    }
+}
+
+fn view(&self, _theme: &Theme) -> Element<Msg> {
+    text_input(self.name.clone(), Msg::Text).label("Name")
+}
+{{/rust}}
+
+<h2>Multiple lines</h2>
+<p><code>text_area</code> works the same way. Return starts a new line, long lines wrap at the width of the field, Up and Down move between lines, the wheel scrolls it, and the view follows the caret.</p>
+{{example field_multi}}
+
+<h2>What the user can do</h2>
+<ul>
+  <li>Type, with Backspace and Delete, and with input methods for languages such as Japanese.</li>
+  <li>Move with the arrow keys, by word with Option-Left and Option-Right, to the line ends with Home and End, and to the start or end of the text with Command-Up and Command-Down.</li>
+  <li>Select with Shift and a movement key, with Command-A, or by dragging with the pointer.</li>
+  <li>Copy, cut and paste with the system clipboard, and delete a word with Option-Backspace.</li>
+</ul>
+<p>Double-click to select a word is not built yet. The cursor moves by character, so an emoji made of several characters takes several presses.</p>

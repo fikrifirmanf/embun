@@ -4,13 +4,25 @@ use crate::{COUNTER, SNIPPETS, Source, examples};
 use std::path::Path;
 
 /// Pages in sidebar order: file name without extension, title.
-const PAGES: &[(&str, &str)] = &[("index", "Getting started"), ("buttons", "Buttons and toolbars"), ("controls", "Controls")];
+const PAGES: &[(&str, &str)] = &[
+    ("index", "Getting started"),
+    ("layout", "Layout and styling"),
+    ("text", "Text and images"),
+    ("buttons", "Buttons and toolbars"),
+    ("controls", "Controls"),
+    ("fields", "Text fields"),
+    ("lists", "Lists"),
+    ("menus", "Menus and dialogs"),
+    ("theme", "Theme and accessibility"),
+];
 
 pub fn build(out: &Path) {
     let layout = std::fs::read_to_string(out.join("src/_layout.html")).expect("read site/src/_layout.html");
+    let mut index = Vec::new();
     for (slug, title) in PAGES {
         let template = std::fs::read_to_string(out.join(format!("src/{slug}.html"))).unwrap_or_else(|e| panic!("read site/src/{slug}.html: {e}"));
-        let content = fill(&template);
+        let content = add_heading_ids(&fill(&template));
+        index_page(&mut index, slug, title, &content);
         let nav: String = PAGES
             .iter()
             .map(|(s, t)| {
@@ -24,6 +36,74 @@ pub fn build(out: &Path) {
         let page = layout.replace("{{title}}", title).replace("{{nav}}", &nav).replace("{{content}}", &content);
         std::fs::write(out.join(format!("{slug}.html")), page).expect("write page");
         println!("wrote {slug}.html");
+    }
+    std::fs::write(out.join("search.json"), format!("[{}]\n", index.join(","))).expect("write search.json");
+    println!("wrote search.json ({} entries)", index.len());
+}
+
+fn slugify(text: &str) -> String {
+    let mut id = String::new();
+    for c in text.chars() {
+        if c.is_ascii_alphanumeric() {
+            id.push(c.to_ascii_lowercase());
+        } else if !id.ends_with('-') && !id.is_empty() {
+            id.push('-');
+        }
+    }
+    id.trim_end_matches('-').to_string()
+}
+
+/// Gives every `<h2>` an id, so search results can link to it.
+fn add_heading_ids(content: &str) -> String {
+    let mut out = String::new();
+    let mut rest = content;
+    while let Some(start) = rest.find("<h2>") {
+        let end = rest[start..].find("</h2>").expect("unclosed h2") + start;
+        let title = &rest[start + 4..end];
+        out.push_str(&rest[..start]);
+        out.push_str(&format!("<h2 id=\"{}\">{title}</h2>", slugify(&strip_tags(title))));
+        rest = &rest[end + 5..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn strip_tags(html: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for c in html.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            c if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+}
+
+fn json(text: &str) -> String {
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', " "))
+}
+
+/// One search entry for the page's intro and one for each section: its heading
+/// and the first paragraph under it.
+fn index_page(index: &mut Vec<String>, slug: &str, title: &str, content: &str) {
+    let first_paragraph = |html: &str| html.find("<p>").and_then(|s| html[s..].find("</p>").map(|e| strip_tags(&html[s..s + e]))).unwrap_or_default();
+    let mut sections = content.split("<h2 id=\"");
+    let intro = sections.next().unwrap_or_default();
+    let href = if slug == "index" { "./".to_string() } else { format!("{slug}.html") };
+    index.push(format!("{{\"page\":{},\"heading\":\"\",\"href\":{},\"text\":{}}}", json(title), json(&href), json(&first_paragraph(intro))));
+    for section in sections {
+        let (id, rest) = section.split_once("\">").expect("heading id");
+        let (heading, body) = rest.split_once("</h2>").expect("heading end");
+        index.push(format!(
+            "{{\"page\":{},\"heading\":{},\"href\":{},\"text\":{}}}",
+            json(title),
+            json(&strip_tags(heading)),
+            json(&format!("{href}#{id}")),
+            json(&first_paragraph(body))
+        ));
     }
 }
 

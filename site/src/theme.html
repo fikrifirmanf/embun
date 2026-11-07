@@ -1,0 +1,44 @@
+<p><code>view</code> receives a <code>Theme</code>. Take colors from it and your UI follows light and dark mode, Reduce Transparency, and whether the window has focus.</p>
+
+<h2>Colors</h2>
+<p><code>background</code>, <code>surface</code>, <code>label</code>, <code>secondary_label</code>, <code>separator</code>, <code>accent</code> and <code>on_accent</code> change with the appearance. For a color of your own, <code>theme.pick(light, dark)</code> returns the first value in light mode and the second in dark mode.</p>
+{{example theme_palette}}
+{{rust}}
+column().bg_gradient(
+    theme.pick(Color::hex(0xffd6a5), Color::hex(0x2b2d42)),
+    theme.pick(Color::hex(0xbde0fe), Color::hex(0x14213d)),
+)
+{{/rust}}
+
+<h2>Window settings</h2>
+<p><code>Settings</code> chooses the window's size and starting look. By default everything follows the system.</p>
+{{rust}}
+run(
+    app,
+    Settings::new("Photos")
+        .size(900.0, 600.0)
+        .appearance(Appearance::Dark)
+        .glass_level(0.5),
+)
+{{/rust}}
+<ul>
+  <li><code>appearance</code>: light or dark. The default follows the system and its changes.</li>
+  <li><code>glass_level</code>: 0 is clear glass, 0.5 matches the macOS default, 1 is tinted.</li>
+  <li><code>reduce_transparency</code>: draws solid surfaces instead of glass. The default follows the system setting on macOS, read when the window opens. Other systems are not read yet.</li>
+  <li><code>system_fonts</code>: also loads installed fonts.</li>
+</ul>
+
+<h2>Glass without focus</h2>
+<p>As on macOS, glass in a window that has lost focus is frosted more, and prominent buttons lose their color. <code>theme.focused</code> tells you which state you are in.</p>
+
+<h2>Accessibility</h2>
+<p>Every element is in the accessibility tree that <a href="https://accesskit.dev">AccessKit</a> hands to VoiceOver, Narrator and Orca, with its role, name and bounds. Buttons can be pressed and text fields edited from the screen reader, and keyboard focus is shared with it. Tab and Shift-Tab move focus between controls, and Space or Return presses the focused one.</p>
+<p>Two things are yours to do:</p>
+<ul>
+  <li><b>Name controls that have no visible text.</b> Icon buttons, switches, sliders and text fields need <code>label</code>, because the screen reader has nothing else to say.</li>
+  <li><b>Give elements in a list a <code>key</code>.</b> Embun keeps hover, press and focus state by key, so state stays with the right row when the list changes.</li>
+</ul>
+{{rust}}
+icon_button("+").on_press(Msg::Add).label("Add photo")
+{{/rust}}
+<p>The screen reader support has not been tested with VoiceOver, Narrator or Orca on a real device yet.</p>

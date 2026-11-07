@@ -50,6 +50,21 @@ pub fn examples() -> Vec<Example> {
         Example { name: "radios", alt: "Three radio buttons with Medium selected", size: [360.0, 190.0], photo: false, source: Snippet(snippets::radios) },
         Example { name: "sliders", alt: "A slider at about one third", size: [360.0, 120.0], photo: false, source: Snippet(snippets::sliders) },
         Example { name: "segmented_control", alt: "A segmented control with Day, Week and Month, Week selected", size: [360.0, 120.0], photo: false, source: Snippet(snippets::segmented_control) },
+        Example { name: "layout_stack", alt: "Three tiles in a row above two tiles in a column", size: [360.0, 200.0], photo: false, source: Snippet(snippets::layout_stack) },
+        Example { name: "layout_grow", alt: "A wide gray tile between two small blue tiles", size: [400.0, 120.0], photo: false, source: Snippet(snippets::layout_grow) },
+        Example { name: "layout_wrap", alt: "Seven rounded tags wrapping onto several lines", size: [380.0, 150.0], photo: false, source: Snippet(snippets::layout_wrap) },
+        Example { name: "layout_absolute", alt: "A card with one tile in its top left corner and one in its bottom right", size: [380.0, 200.0], photo: false, source: Snippet(snippets::layout_absolute) },
+        Example { name: "style_card", alt: "A white rounded card titled Storage with a line of gray text", size: [380.0, 160.0], photo: false, source: Snippet(snippets::style_card) },
+        Example { name: "style_gradient", alt: "A rounded rectangle with a gradient from orange to blue", size: [380.0, 160.0], photo: false, source: Snippet(snippets::style_gradient) },
+        Example { name: "text_styles", alt: "Four lines of text from a large bold title down to a small caption", size: [380.0, 180.0], photo: false, source: Snippet(snippets::text_styles) },
+        Example { name: "text_wrapping", alt: "A centered paragraph wrapped to three lines", size: [380.0, 150.0], photo: false, source: Snippet(snippets::text_wrapping) },
+        Example { name: "image_scaled", alt: "A rounded square image with a red, green and blue gradient", size: [380.0, 180.0], photo: false, source: Snippet(snippets::image_scaled) },
+        Example { name: "field_single", alt: "A text field holding the word Embun above an empty field with the placeholder Search", size: [380.0, 150.0], photo: false, source: Snippet(snippets::field_single) },
+        Example { name: "field_multi", alt: "A text area with two lines of text, the second wrapping", size: [380.0, 170.0], photo: false, source: Snippet(snippets::field_multi) },
+        Example { name: "list_rows", alt: "A list showing items 1 to 6 of a million", size: [380.0, 240.0], photo: false, source: Snippet(snippets::list_rows) },
+        Example { name: "menu_example", alt: "A glass menu with two sort options, one checked, a separator and Share", size: [380.0, 220.0], photo: true, source: Snippet(snippets::menu_example) },
+        Example { name: "dialog_example", alt: "A dimmed window with a dialog asking Discard changes with two buttons", size: [420.0, 260.0], photo: true, source: Snippet(snippets::dialog_example) },
+        Example { name: "theme_palette", alt: "Five color swatches: background, surface, label, separator and accent", size: [420.0, 140.0], photo: false, source: Snippet(snippets::theme_palette) },
     ]
 }
 
@@ -69,7 +84,7 @@ impl App for Preview {
         if self.photo {
             div().items_center().justify_center().child(image(self.backdrop.clone()).absolute().inset(0.0)).child(content)
         } else {
-            div().items_center().justify_center().bg(theme.surface()).child(content)
+            div().items_center().justify_center().bg(theme.background()).child(content)
         }
     }
 }

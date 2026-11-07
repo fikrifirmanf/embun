@@ -1,0 +1,17 @@
+<p>Text is set in Inter, which is embedded in the library, so it measures the same on every machine. Embun does not use Apple's fonts. Set <code>Settings::system_fonts(true)</code> to also load installed fonts, which you need for emoji and for scripts Inter does not cover.</p>
+
+<h2>Size, weight and color</h2>
+<p><code>text_xs</code> up to <code>text_4xl</code> set common sizes, and <code>text_size</code> takes any size in pixels. <code>font_medium</code>, <code>font_semibold</code> and <code>font_bold</code> set the weight. Size, weight and color are inherited, so set them on a parent to style everything inside it.</p>
+{{example text_styles}}
+
+<h2>Wrapping and alignment</h2>
+<p>Text wraps at the width of its box. <code>text_center</code> and <code>text_right</code> align the lines, and <code>leading</code> sets the line height as a multiple of the font size.</p>
+{{example text_wrapping}}
+
+<h2>Images</h2>
+<p><code>Image::from_rgba</code> takes raw pixels. <code>Image::open</code> and <code>Image::from_bytes</code> read PNG and JPEG, and return an <code>ImageError</code> that names the file and the problem. Set <code>w</code> or <code>h</code> to scale an image, and <code>rounded</code> to clip its corners. When you set only one of them, the aspect ratio is kept.</p>
+{{example image_scaled}}
+{{rust}}
+let photo = Image::open("photo.jpg")?;
+image(photo).w(200.0).rounded(10.0)
+{{/rust}}

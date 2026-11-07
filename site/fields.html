@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text fields · Embun</title>
+<meta name="description" content="Embun is a Rust UI toolkit with glass controls that match macOS 27, drawn with wgpu.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3c5 7 9 11 9 16a9 9 0 0 1-18 0c0-5 4-9 9-16z' fill='%230a60d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script>
+  try {
+    var saved = localStorage.getItem("embun-theme");
+    if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="./">Embun</a>
+  <div class="search">
+    <label class="sr" for="q">Search the docs</label>
+    <input id="q" type="search" placeholder="Search" autocomplete="off" aria-controls="results">
+    <ul id="results" hidden></ul>
+  </div>
+  <nav class="links" aria-label="Project">
+    <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
+    <a href="https://docs.rs/embun">API reference</a>
+    <a href="https://crates.io/crates/embun">crates.io</a>
+  </nav>
+  <button class="mode" type="button" id="mode" aria-label="Switch between light and dark previews">
+    <span class="mode-light">Light</span><span class="mode-dark">Dark</span>
+  </button>
+</header>
+<div class="shell">
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="fields.html" aria-current="page">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
+  <main id="main">
+    <h1>Text fields</h1>
+    <p>Text fields show the value your app owns. When the user types, Embun calls the function you passed and sends your <code>update</code> the new text. You store it, and the next <code>view</code> passes it back in.</p>
+
+<h2 id="single-line">Single line</h2>
+<p><code>text_input(value, on_change)</code> is 28 px tall and 200 px wide until you set <code>w</code>, <code>h</code> or <code>grow</code>. <code>placeholder</code> shows hint text while the field is empty, and <code>label</code> gives it a name for screen readers, since a placeholder is not a label.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/field_single-light.png" alt="A text field holding the word Embun above an empty field with the placeholder Search" width="380" height="150"><img class="dark" src="img/field_single-dark.png" alt="A text field holding the word Embun above an empty field with the placeholder Search" width="380" height="150"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">field_single</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">column</span>()
+        .<span class="f">gap_3</span>()
+        .<span class="f">child</span>(<span class="f">text_input</span>(<span class="s">&quot;Embun&quot;</span>, <span class="t">Msg</span>::<span class="t">Text</span>).<span class="f">label</span>(<span class="s">&quot;Name&quot;</span>))
+        .<span class="f">child</span>(<span class="f">text_input</span>(<span class="s">&quot;&quot;</span>, <span class="t">Msg</span>::<span class="t">Text</span>).<span class="f">placeholder</span>(<span class="s">&quot;Search&quot;</span>).<span class="f">label</span>(<span class="s">&quot;Search&quot;</span>))
+}</code></pre></figure>
+<pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">update</span>(&amp;<span class="k">mut</span> <span class="k">self</span>, message: <span class="t">Msg</span>) {
+    <span class="k">match</span> message {
+        <span class="t">Msg</span>::<span class="t">Text</span>(text) =&gt; <span class="k">self</span>.name = text,
+    }
+}
+
+<span class="k">fn</span> <span class="f">view</span>(&amp;<span class="k">self</span>, _theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">text_input</span>(<span class="k">self</span>.name.<span class="f">clone</span>(), <span class="t">Msg</span>::<span class="t">Text</span>).<span class="f">label</span>(<span class="s">&quot;Name&quot;</span>)
+}</code></pre>
+
+<h2 id="multiple-lines">Multiple lines</h2>
+<p><code>text_area</code> works the same way. Return starts a new line, long lines wrap at the width of the field, Up and Down move between lines, the wheel scrolls it, and the view follows the caret.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/field_multi-light.png" alt="A text area with two lines of text, the second wrapping" width="380" height="170"><img class="dark" src="img/field_multi-dark.png" alt="A text area with two lines of text, the second wrapping" width="380" height="170"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">field_multi</span>(_theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">text_area</span>(<span class="s">&quot;Buy milk\nCall the bank about the card that was declined on Friday&quot;</span>, <span class="t">Msg</span>::<span class="t">Text</span>)
+        .<span class="f">w</span>(<span class="n">300.0</span>)
+        .<span class="f">h</span>(<span class="n">110.0</span>)
+        .<span class="f">label</span>(<span class="s">&quot;Notes&quot;</span>)
+}</code></pre></figure>
+
+<h2 id="what-the-user-can-do">What the user can do</h2>
+<ul>
+  <li>Type, with Backspace and Delete, and with input methods for languages such as Japanese.</li>
+  <li>Move with the arrow keys, by word with Option-Left and Option-Right, to the line ends with Home and End, and to the start or end of the text with Command-Up and Command-Down.</li>
+  <li>Select with Shift and a movement key, with Command-A, or by dragging with the pointer.</li>
+  <li>Copy, cut and paste with the system clipboard, and delete a word with Option-Backspace.</li>
+</ul>
+<p>Double-click to select a word is not built yet. The cursor moves by character, so an emoji made of several characters takes several presses.</p>
+
+  </main>
+</div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    function current() {
+      return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    }
+    var input = document.getElementById("q"), results = document.getElementById("results"), index = null;
+    function load(then) {
+      if (index) return then();
+      fetch("search.json").then(function (r) { return r.json(); }).then(function (data) { index = data; then(); }).catch(function () {});
+    }
+    function show() {
+      var terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      results.textContent = "";
+      if (!terms.length || !index) { results.hidden = true; return; }
+      var hits = [];
+      index.forEach(function (e) {
+        var heading = (e.heading || e.page).toLowerCase(), all = heading + " " + e.text.toLowerCase();
+        if (terms.every(function (t) { return all.indexOf(t) >= 0; })) {
+          hits.push({ e: e, score: terms.filter(function (t) { return heading.indexOf(t) >= 0; }).length });
+        }
+      });
+      hits.sort(function (a, b) { return b.score - a.score; });
+      hits.slice(0, 8).forEach(function (h) {
+        var li = document.createElement("li"), a = document.createElement("a"), t = document.createElement("span"), p = document.createElement("span");
+        a.href = h.e.href;
+        t.className = "r-title"; t.textContent = h.e.heading || h.e.page;
+        p.className = "r-page"; p.textContent = h.e.heading ? h.e.page : "Page";
+        a.append(t, p); li.append(a); results.append(li);
+      });
+      if (!hits.length) {
+        var none = document.createElement("li"); none.className = "none"; none.textContent = "No results"; results.append(none);
+      }
+      results.hidden = false;
+    }
+    input.addEventListener("focus", function () { load(show); });
+    input.addEventListener("input", function () { load(show); });
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { input.value = ""; show(); }
+      if (ev.key === "ArrowDown") { var a = results.querySelector("a"); if (a) { a.focus(); ev.preventDefault(); } }
+      if (ev.key === "Enter") { var f = results.querySelector("a"); if (f) location.href = f.href; }
+    });
+    results.addEventListener("keydown", function (ev) {
+      var a = document.activeElement;
+      if (ev.key === "ArrowDown" && a.parentNode.nextElementSibling) { a.parentNode.nextElementSibling.querySelector("a").focus(); ev.preventDefault(); }
+      if (ev.key === "ArrowUp") { var prev = a.parentNode.previousElementSibling; (prev ? prev.querySelector("a") : input).focus(); ev.preventDefault(); }
+      if (ev.key === "Escape") { input.focus(); input.value = ""; show(); }
+    });
+    document.addEventListener("click", function (ev) { if (!ev.target.closest(".search")) results.hidden = true; });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { ev.preventDefault(); input.focus(); }
+    });
+    document.getElementById("mode").addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("embun-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>

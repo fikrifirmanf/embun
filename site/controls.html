@@ -18,6 +18,11 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <a class="brand" href="./">Embun</a>
+  <div class="search">
+    <label class="sr" for="q">Search the docs</label>
+    <input id="q" type="search" placeholder="Search" autocomplete="off" aria-controls="results">
+    <ul id="results" hidden></ul>
+  </div>
   <nav class="links" aria-label="Project">
     <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
     <a href="https://docs.rs/embun">API reference</a>
@@ -28,13 +33,13 @@
   </button>
 </header>
 <div class="shell">
-  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html" aria-current="page">Controls</a></li></ul></nav>
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html" aria-current="page">Controls</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
   <main id="main">
     <h1>Controls</h1>
     <p>These controls hold no state of their own. You pass the current value and a message, and your <code>update</code> changes the value. All of them tell screen readers their role and state.</p>
 <p>The previews sit on a plain background. Put these controls on a solid or content background, and keep glass for buttons, slider thumbs and bars.</p>
 
-<h2>Switch</h2>
+<h2 id="switch">Switch</h2>
 <p><code>switch(theme, on, message)</code>. The knob slides when the value changes. Give it a <code>label</code> so a screen reader can say what it turns on.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/switches-light.png" alt="Two switches, the first on and the second off" width="360" height="120"><img class="dark" src="img/switches-dark.png" alt="Two switches, the first on and the second off" width="360" height="120"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">switches</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">row</span>()
@@ -44,7 +49,7 @@
         .<span class="f">child</span>(<span class="f">switch</span>(theme, false, <span class="t">Msg</span>::<span class="t">Toggle</span>).<span class="f">label</span>(<span class="s">&quot;Bluetooth&quot;</span>))
 }</code></pre></figure>
 
-<h2>Checkbox</h2>
+<h2 id="checkbox">Checkbox</h2>
 <p><code>checkbox(theme, label, checked, message)</code> draws the label beside the box, and pressing the label toggles it too.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/checkboxes-light.png" alt="Two checkboxes, the first checked" width="360" height="150"><img class="dark" src="img/checkboxes-dark.png" alt="Two checkboxes, the first checked" width="360" height="150"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">checkboxes</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">column</span>()
@@ -53,7 +58,7 @@
         .<span class="f">child</span>(<span class="f">checkbox</span>(theme, <span class="s">&quot;Remind me tomorrow&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Toggle</span>))
 }</code></pre></figure>
 
-<h2>Radio</h2>
+<h2 id="radio">Radio</h2>
 <p><code>radio(theme, label, selected, message)</code>. Build a group by calling it once per option, with <code>selected</code> true for the current one, and give each a <code>key</code>.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/radios-light.png" alt="Three radio buttons with Medium selected" width="360" height="190"><img class="dark" src="img/radios-dark.png" alt="Three radio buttons with Medium selected" width="360" height="190"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">radios</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">column</span>()
@@ -63,13 +68,13 @@
         .<span class="f">child</span>(<span class="f">radio</span>(theme, <span class="s">&quot;Large&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Pick</span>(<span class="n">2</span>)).<span class="f">key</span>(<span class="s">&quot;large&quot;</span>))
 }</code></pre></figure>
 
-<h2>Slider</h2>
+<h2 id="slider">Slider</h2>
 <p><code>slider(theme, value, on_change)</code> takes a value from 0 to 1 and calls <code>on_change</code> with the new one while the user drags. It also responds to the arrow keys, Home and End when focused, and screen readers can increment, decrement or set it.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/sliders-light.png" alt="A slider at about one third" width="360" height="120"><img class="dark" src="img/sliders-dark.png" alt="A slider at about one third" width="360" height="120"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">sliders</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">slider</span>(theme, <span class="n">0.35</span>, <span class="t">Msg</span>::<span class="t">Volume</span>).<span class="f">w</span>(<span class="n">240.0</span>).<span class="f">label</span>(<span class="s">&quot;Volume&quot;</span>)
 }</code></pre></figure>
 
-<h2>Segmented control</h2>
+<h2 id="segmented-control">Segmented control</h2>
 <p><code>segmented(theme, options, selected, on_select)</code> shows one of a few options at a time. It sizes itself to its labels.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/segmented_control-light.png" alt="A segmented control with Day, Week and Month, Week selected" width="360" height="120"><img class="dark" src="img/segmented_control-dark.png" alt="A segmented control with Day, Week and Month, Week selected" width="360" height="120"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">segmented_control</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">segmented</span>(theme, &amp;[<span class="s">&quot;Day&quot;</span>, <span class="s">&quot;Week&quot;</span>, <span class="s">&quot;Month&quot;</span>], <span class="n">1</span>, <span class="t">Msg</span>::<span class="t">View</span>)
@@ -83,6 +88,52 @@
     function current() {
       return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     }
+    var input = document.getElementById("q"), results = document.getElementById("results"), index = null;
+    function load(then) {
+      if (index) return then();
+      fetch("search.json").then(function (r) { return r.json(); }).then(function (data) { index = data; then(); }).catch(function () {});
+    }
+    function show() {
+      var terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      results.textContent = "";
+      if (!terms.length || !index) { results.hidden = true; return; }
+      var hits = [];
+      index.forEach(function (e) {
+        var heading = (e.heading || e.page).toLowerCase(), all = heading + " " + e.text.toLowerCase();
+        if (terms.every(function (t) { return all.indexOf(t) >= 0; })) {
+          hits.push({ e: e, score: terms.filter(function (t) { return heading.indexOf(t) >= 0; }).length });
+        }
+      });
+      hits.sort(function (a, b) { return b.score - a.score; });
+      hits.slice(0, 8).forEach(function (h) {
+        var li = document.createElement("li"), a = document.createElement("a"), t = document.createElement("span"), p = document.createElement("span");
+        a.href = h.e.href;
+        t.className = "r-title"; t.textContent = h.e.heading || h.e.page;
+        p.className = "r-page"; p.textContent = h.e.heading ? h.e.page : "Page";
+        a.append(t, p); li.append(a); results.append(li);
+      });
+      if (!hits.length) {
+        var none = document.createElement("li"); none.className = "none"; none.textContent = "No results"; results.append(none);
+      }
+      results.hidden = false;
+    }
+    input.addEventListener("focus", function () { load(show); });
+    input.addEventListener("input", function () { load(show); });
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { input.value = ""; show(); }
+      if (ev.key === "ArrowDown") { var a = results.querySelector("a"); if (a) { a.focus(); ev.preventDefault(); } }
+      if (ev.key === "Enter") { var f = results.querySelector("a"); if (f) location.href = f.href; }
+    });
+    results.addEventListener("keydown", function (ev) {
+      var a = document.activeElement;
+      if (ev.key === "ArrowDown" && a.parentNode.nextElementSibling) { a.parentNode.nextElementSibling.querySelector("a").focus(); ev.preventDefault(); }
+      if (ev.key === "ArrowUp") { var prev = a.parentNode.previousElementSibling; (prev ? prev.querySelector("a") : input).focus(); ev.preventDefault(); }
+      if (ev.key === "Escape") { input.focus(); input.value = ""; show(); }
+    });
+    document.addEventListener("click", function (ev) { if (!ev.target.closest(".search")) results.hidden = true; });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { ev.preventDefault(); input.focus(); }
+    });
     document.getElementById("mode").addEventListener("click", function () {
       var next = current() === "dark" ? "light" : "dark";
       root.dataset.theme = next;

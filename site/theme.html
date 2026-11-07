@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Theme and accessibility · Embun</title>
+<meta name="description" content="Embun is a Rust UI toolkit with glass controls that match macOS 27, drawn with wgpu.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3c5 7 9 11 9 16a9 9 0 0 1-18 0c0-5 4-9 9-16z' fill='%230a60d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script>
+  try {
+    var saved = localStorage.getItem("embun-theme");
+    if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="./">Embun</a>
+  <div class="search">
+    <label class="sr" for="q">Search the docs</label>
+    <input id="q" type="search" placeholder="Search" autocomplete="off" aria-controls="results">
+    <ul id="results" hidden></ul>
+  </div>
+  <nav class="links" aria-label="Project">
+    <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
+    <a href="https://docs.rs/embun">API reference</a>
+    <a href="https://crates.io/crates/embun">crates.io</a>
+  </nav>
+  <button class="mode" type="button" id="mode" aria-label="Switch between light and dark previews">
+    <span class="mode-light">Light</span><span class="mode-dark">Dark</span>
+  </button>
+</header>
+<div class="shell">
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html" aria-current="page">Theme and accessibility</a></li></ul></nav>
+  <main id="main">
+    <h1>Theme and accessibility</h1>
+    <p><code>view</code> receives a <code>Theme</code>. Take colors from it and your UI follows light and dark mode, Reduce Transparency, and whether the window has focus.</p>
+
+<h2 id="colors">Colors</h2>
+<p><code>background</code>, <code>surface</code>, <code>label</code>, <code>secondary_label</code>, <code>separator</code>, <code>accent</code> and <code>on_accent</code> change with the appearance. For a color of your own, <code>theme.pick(light, dark)</code> returns the first value in light mode and the second in dark mode.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/theme_palette-light.png" alt="Five color swatches: background, surface, label, separator and accent" width="420" height="140"><img class="dark" src="img/theme_palette-dark.png" alt="Five color swatches: background, surface, label, separator and accent" width="420" height="140"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">theme_palette</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="k">let</span> swatch = |name: &amp;str, color: <span class="t">Color</span>| {
+        <span class="f">column</span>()
+            .<span class="f">items_center</span>()
+            .<span class="f">gap_1</span>()
+            .<span class="f">child</span>(<span class="f">div</span>().<span class="f">w</span>(<span class="n">52.0</span>).<span class="f">h</span>(<span class="n">52.0</span>).<span class="f">rounded_lg</span>().<span class="f">bg</span>(color).<span class="f">border</span>(<span class="n">1.0</span>, theme.<span class="f">separator</span>()))
+            .<span class="f">child</span>(<span class="f">text</span>(name.<span class="f">to_string</span>()).<span class="f">text_xs</span>())
+    };
+    <span class="f">row</span>()
+        .<span class="f">gap_3</span>()
+        .<span class="f">child</span>(<span class="f">swatch</span>(<span class="s">&quot;background&quot;</span>, theme.<span class="f">background</span>()))
+        .<span class="f">child</span>(<span class="f">swatch</span>(<span class="s">&quot;surface&quot;</span>, theme.<span class="f">surface</span>()))
+        .<span class="f">child</span>(<span class="f">swatch</span>(<span class="s">&quot;label&quot;</span>, theme.<span class="f">label</span>()))
+        .<span class="f">child</span>(<span class="f">swatch</span>(<span class="s">&quot;separator&quot;</span>, theme.<span class="f">separator</span>()))
+        .<span class="f">child</span>(<span class="f">swatch</span>(<span class="s">&quot;accent&quot;</span>, theme.<span class="f">accent</span>()))
+}</code></pre></figure>
+<pre class="code" tabindex="0"><code><span class="f">column</span>().<span class="f">bg_gradient</span>(
+    theme.<span class="f">pick</span>(<span class="t">Color</span>::<span class="f">hex</span>(<span class="n">0xffd6a5</span>), <span class="t">Color</span>::<span class="f">hex</span>(<span class="n">0x2b2d42</span>)),
+    theme.<span class="f">pick</span>(<span class="t">Color</span>::<span class="f">hex</span>(<span class="n">0xbde0fe</span>), <span class="t">Color</span>::<span class="f">hex</span>(<span class="n">0x14213d</span>)),
+)</code></pre>
+
+<h2 id="window-settings">Window settings</h2>
+<p><code>Settings</code> chooses the window's size and starting look. By default everything follows the system.</p>
+<pre class="code" tabindex="0"><code><span class="f">run</span>(
+    app,
+    <span class="t">Settings</span>::<span class="f">new</span>(<span class="s">&quot;Photos&quot;</span>)
+        .<span class="f">size</span>(<span class="n">900.0</span>, <span class="n">600.0</span>)
+        .<span class="f">appearance</span>(<span class="t">Appearance</span>::<span class="t">Dark</span>)
+        .<span class="f">glass_level</span>(<span class="n">0.5</span>),
+)</code></pre>
+<ul>
+  <li><code>appearance</code>: light or dark. The default follows the system and its changes.</li>
+  <li><code>glass_level</code>: 0 is clear glass, 0.5 matches the macOS default, 1 is tinted.</li>
+  <li><code>reduce_transparency</code>: draws solid surfaces instead of glass. The default follows the system setting on macOS, read when the window opens. Other systems are not read yet.</li>
+  <li><code>system_fonts</code>: also loads installed fonts.</li>
+</ul>
+
+<h2 id="glass-without-focus">Glass without focus</h2>
+<p>As on macOS, glass in a window that has lost focus is frosted more, and prominent buttons lose their color. <code>theme.focused</code> tells you which state you are in.</p>
+
+<h2 id="accessibility">Accessibility</h2>
+<p>Every element is in the accessibility tree that <a href="https://accesskit.dev">AccessKit</a> hands to VoiceOver, Narrator and Orca, with its role, name and bounds. Buttons can be pressed and text fields edited from the screen reader, and keyboard focus is shared with it. Tab and Shift-Tab move focus between controls, and Space or Return presses the focused one.</p>
+<p>Two things are yours to do:</p>
+<ul>
+  <li><b>Name controls that have no visible text.</b> Icon buttons, switches, sliders and text fields need <code>label</code>, because the screen reader has nothing else to say.</li>
+  <li><b>Give elements in a list a <code>key</code>.</b> Embun keeps hover, press and focus state by key, so state stays with the right row when the list changes.</li>
+</ul>
+<pre class="code" tabindex="0"><code><span class="f">icon_button</span>(<span class="s">&quot;+&quot;</span>).<span class="f">on_press</span>(<span class="t">Msg</span>::<span class="t">Add</span>).<span class="f">label</span>(<span class="s">&quot;Add photo&quot;</span>)</code></pre>
+<p>The screen reader support has not been tested with VoiceOver, Narrator or Orca on a real device yet.</p>
+
+  </main>
+</div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    function current() {
+      return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    }
+    var input = document.getElementById("q"), results = document.getElementById("results"), index = null;
+    function load(then) {
+      if (index) return then();
+      fetch("search.json").then(function (r) { return r.json(); }).then(function (data) { index = data; then(); }).catch(function () {});
+    }
+    function show() {
+      var terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      results.textContent = "";
+      if (!terms.length || !index) { results.hidden = true; return; }
+      var hits = [];
+      index.forEach(function (e) {
+        var heading = (e.heading || e.page).toLowerCase(), all = heading + " " + e.text.toLowerCase();
+        if (terms.every(function (t) { return all.indexOf(t) >= 0; })) {
+          hits.push({ e: e, score: terms.filter(function (t) { return heading.indexOf(t) >= 0; }).length });
+        }
+      });
+      hits.sort(function (a, b) { return b.score - a.score; });
+      hits.slice(0, 8).forEach(function (h) {
+        var li = document.createElement("li"), a = document.createElement("a"), t = document.createElement("span"), p = document.createElement("span");
+        a.href = h.e.href;
+        t.className = "r-title"; t.textContent = h.e.heading || h.e.page;
+        p.className = "r-page"; p.textContent = h.e.heading ? h.e.page : "Page";
+        a.append(t, p); li.append(a); results.append(li);
+      });
+      if (!hits.length) {
+        var none = document.createElement("li"); none.className = "none"; none.textContent = "No results"; results.append(none);
+      }
+      results.hidden = false;
+    }
+    input.addEventListener("focus", function () { load(show); });
+    input.addEventListener("input", function () { load(show); });
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { input.value = ""; show(); }
+      if (ev.key === "ArrowDown") { var a = results.querySelector("a"); if (a) { a.focus(); ev.preventDefault(); } }
+      if (ev.key === "Enter") { var f = results.querySelector("a"); if (f) location.href = f.href; }
+    });
+    results.addEventListener("keydown", function (ev) {
+      var a = document.activeElement;
+      if (ev.key === "ArrowDown" && a.parentNode.nextElementSibling) { a.parentNode.nextElementSibling.querySelector("a").focus(); ev.preventDefault(); }
+      if (ev.key === "ArrowUp") { var prev = a.parentNode.previousElementSibling; (prev ? prev.querySelector("a") : input).focus(); ev.preventDefault(); }
+      if (ev.key === "Escape") { input.focus(); input.value = ""; show(); }
+    });
+    document.addEventListener("click", function (ev) { if (!ev.target.closest(".search")) results.hidden = true; });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { ev.preventDefault(); input.focus(); }
+    });
+    document.getElementById("mode").addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("embun-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>
