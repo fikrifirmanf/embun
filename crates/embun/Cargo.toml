@@ -1,11 +1,12 @@
 [package]
 name = "embun"
 description = "A Rust UI toolkit with frosted, merging glass"
-version.workspace = true
+version = "0.2.0"
 edition.workspace = true
 license = "(MIT OR Apache-2.0) AND OFL-1.1"
 repository.workspace = true
 readme = "README.md"
+homepage = "https://fikrifirmanf.github.io/embun/"
 keywords.workspace = true
 categories.workspace = true
 

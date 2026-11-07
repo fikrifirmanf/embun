@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 - 2026-11-08
 
 ### Added
 
@@ -14,7 +14,7 @@
 - Dragging in a text field selects text, and the wheel scrolls a text area. At its limit, the wheel goes on to the page behind it.
 - Switch knobs slide to the other end instead of jumping. The track color still changes at once.
 - The window reads the system Reduce Transparency setting on macOS when it opens.
-- The `controls` and `notes` examples.
+- The `controls` and `notes` examples, and a documentation site at https://fikrifirmanf.github.io/embun/ with every example rendered by Embun's own renderer, in light and dark, next to its code.
 
 ### Changed
 

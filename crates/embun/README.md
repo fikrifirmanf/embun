@@ -46,6 +46,8 @@ fn main() -> Result<(), RunError> {
 }
 ```
 
+Documentation, with each example rendered next to its code: <https://fikrifirmanf.github.io/embun/>. API reference: <https://docs.rs/embun>.
+
 ## How it draws
 
 Each frame has three layers:
