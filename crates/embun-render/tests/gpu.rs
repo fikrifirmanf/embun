@@ -13,7 +13,14 @@ struct Gpu {
     renderer: GlassRenderer,
 }
 
-fn gpu() -> Gpu {
+/// One device for every test. Creating devices from many test threads at
+/// once crashes Mesa's llvmpipe Vulkan driver (SIGSEGV inside the driver).
+fn gpu() -> &'static Gpu {
+    static GPU: std::sync::OnceLock<Gpu> = std::sync::OnceLock::new();
+    GPU.get_or_init(new_gpu)
+}
+
+fn new_gpu() -> Gpu {
     let (device, queue) = pollster::block_on(async {
         let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env())
             .request_adapter(&wgpu::RequestAdapterOptions::default())
@@ -318,6 +325,21 @@ fn shapes_in_different_merge_groups_do_not_merge() {
     assert_near(separate(146, 50), merged(146, 50), 1);
 }
 
+// unslop-ignore TEST_WITHOUT_ASSERTION -- asserts through the assert_near helper; fails on tint bleed (mutation-checked)
+#[test]
+fn a_tinted_shape_does_not_tint_a_separate_neighbor() {
+    let gpu = gpu();
+    let params = GlassParams::from_level(0.5, GlassLayers::default(), false);
+    let blue = [0.0, 0.52, 0.98];
+    let plain = circle(100.0, 50.0, 20.0, 0.0);
+    let alone = render(&gpu, [230, 230, 230], &[plain], params);
+    let beside = render(&gpu, [230, 230, 230], &[plain, circle(146.0, 50.0, 20.0, 0.0).tint(blue, 1.0).group(1)], params);
+    // The plain circle's edge nearest the blue one, and its center.
+    for x in [100, 117] {
+        assert_near(beside(x, 50), alone(x, 50), 1);
+    }
+}
+
 #[test]
 fn frames_over_two_backdrops_can_share_one_encoder() {
     let gpu = gpu();
@@ -398,11 +420,24 @@ fn shapes_with_nan_or_infinite_values_are_skipped() {
     let params = GlassParams::from_level(1.0, GlassLayers::default(), false);
     let good = circle(60.0, 50.0, 20.0, 0.0);
     let alone = render(&gpu, [20, 20, 20], &[good], params);
-    let bad = [circle(f32::NAN, 50.0, 20.0, 0.0), GlassShape { radius: f32::INFINITY, ..circle(140.0, 50.0, 20.0, 0.0) }];
+    let bad = [circle(f32::NAN, 50.0, 20.0, 0.0), GlassShape { half_size: [f32::INFINITY, 20.0], ..circle(140.0, 50.0, 20.0, 0.0) }];
     let mixed = render(&gpu, [20, 20, 20], &[bad[0], good, bad[1]], params);
     for (x, y) in [(60, 50), (140, 50), (100, 50), (5, 5)] {
         assert_eq!(mixed(x, y), alone(x, y), "pixel ({x}, {y})");
     }
+}
+
+#[test]
+fn an_infinite_radius_draws_a_capsule() {
+    let gpu = gpu();
+    let params = GlassParams::from_level(1.0, GlassLayers::default(), false);
+    let capsule = |radius| [GlassShape::new([100.0, 50.0], [60.0, 20.0], radius)];
+    let infinite = render(&gpu, [20, 20, 20], &capsule(f32::INFINITY), params);
+    let half_height = render(&gpu, [20, 20, 20], &capsule(20.0), params);
+    for (x, y) in [(100, 50), (45, 50), (41, 38), (155, 50)] {
+        assert_eq!(infinite(x, y), half_height(x, y), "pixel ({x}, {y})");
+    }
+    assert!(infinite(100, 50)[1] > 150, "the capsule should be drawn, got {:?}", infinite(100, 50));
 }
 
 #[test]

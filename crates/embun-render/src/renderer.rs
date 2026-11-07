@@ -496,7 +496,8 @@ impl GlassRenderer {
         let mut out = Uniforms::zeroed();
         for (i, s) in shapes.iter().enumerate() {
             out.shapes[i] = [s.center[0], s.center[1], s.half_size[0].max(0.0), s.half_size[1].max(0.0)];
-            out.extra[i] = [s.radius.max(0.0), s.appearance.clamp(0.0, 1.0), s.group as f32, 0.0];
+            let radius = s.radius.clamp(0.0, s.half_size[0].min(s.half_size[1]).max(0.0));
+            out.extra[i] = [radius, s.appearance.clamp(0.0, 1.0), s.group as f32, 0.0];
             out.tints[i] = s.tint.map(|c| if c.is_finite() { c.clamp(0.0, 1.0) } else { 0.0 });
         }
         let p = frame.params;
@@ -532,10 +533,10 @@ impl GlassRenderer {
     }
 }
 
-/// A shape with any NaN or infinite geometry would cover the screen with NaN;
-/// it is dropped instead.
+/// A shape with NaN or infinite geometry would cover the screen with NaN; it
+/// is dropped instead. An infinite radius is fine: it gives a capsule.
 fn is_drawable(s: &GlassShape) -> bool {
-    s.center.iter().chain(&s.half_size).chain([&s.radius, &s.appearance]).all(|v| v.is_finite())
+    s.center.iter().chain(&s.half_size).chain([&s.appearance]).all(|v| v.is_finite()) && !s.radius.is_nan()
 }
 
 /// A pipeline with no vertex buffers that replaces what it draws over.

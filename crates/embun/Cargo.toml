@@ -3,12 +3,21 @@ name = "embun"
 description = "A Rust UI toolkit with frosted, merging glass"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "(MIT OR Apache-2.0) AND OFL-1.1"
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
 embun-render.workspace = true
 embun-motion.workspace = true
+wgpu.workspace = true
+bytemuck.workspace = true
+pollster.workspace = true
+winit.workspace = true
+taffy.workspace = true
+glyphon.workspace = true
+
+[dev-dependencies]
+png.workspace = true

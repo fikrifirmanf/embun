@@ -151,14 +151,29 @@ struct Style {
     tint_strength: f32,
 };
 
-// Appearance and tint blended by distance, so merged shapes share them smoothly.
+// Appearance and tint blended by distance among the shapes of the nearest
+// shape's merge group, so merged shapes share them smoothly and a separate
+// neighbor never lends its tint.
 fn style_at(p: vec2f) -> Style {
+    var nearest = 1e5;
+    var group = 0.0;
+    for (var k = 0u; k < near_count; k++) {
+        let i = near[k];
+        let d = sd_round_box(p - u.shapes[i].xy, u.shapes[i].zw, u.extra[i].x);
+        if (d < nearest) {
+            nearest = d;
+            group = u.extra[i].z;
+        }
+    }
     var a = 0.0;
     var ws = 0.0;
     var tint = vec3f(0.0);
     var tw = 0.0;
     for (var k = 0u; k < near_count; k++) {
         let i = near[k];
+        if (u.extra[i].z != group) {
+            continue;
+        }
         let s = u.shapes[i];
         let w = exp(-max(sd_round_box(p - s.xy, s.zw, u.extra[i].x), 0.0) / 16.0);
         a += w * u.extra[i].y;

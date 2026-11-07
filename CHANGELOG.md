@@ -4,6 +4,7 @@
 
 ### Added
 
+- The `embun` framework: `App` (`update` and `view`), elements with Tailwind-style methods, layout with taffy, text in the embedded Inter font, images, glass `button`, `icon_button`, `toolbar_group`, `toolbar_item`, `sidebar` and `sidebar_item`, pointer, wheel and keyboard input with focus, spring press and hover animations, `run` for a winit window, and `snapshot` for tests.
 - Tinted glass for prominent buttons: `GlassShape::tint` and `GlassParams::tint`, fitted to macOS 27.0.1 `.glassProminent` buttons. Windows without focus draw them as plain glass, as macOS does.
 - Merge groups: `GlassShape::group`. Only shapes in the same group melt together.
 - `GlassShape::new` and the `appearance`, `tint` and `group` setters. `GlassShape` implements `Default`.

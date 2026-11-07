@@ -2,13 +2,13 @@
 
 Embun is a Rust UI toolkit built on wgpu. It draws translucent glass controls that match the look of macOS 27, on any platform wgpu runs on. Embun is Indonesian for dew.
 
-**Status: early.** The glass renderer and the spring animations work. The widget framework is not written yet, so there are no buttons or windows to use.
+**Status: early.** The glass renderer, the spring animations and a first version of the framework work: windows, layout, text, images, glass buttons, toolbars and sidebars. Text input, menus and screen reader support are not written yet.
 
 | Crate | What it does |
 |---|---|
 | [`embun-render`](crates/embun-render) | Draws glass shapes over a backdrop into any wgpu texture. Frost, edge bending, tint, outline, and shapes that merge when they get close. |
 | [`embun-motion`](crates/embun-motion) | Springs, described the SwiftUI way with a response time and a damping fraction. |
-| [`embun`](crates/embun) | The framework, later. For now it re-exports the two crates above. |
+| [`embun`](crates/embun) | The framework: an Elm-style `App` with `update` and `view`, Tailwind-style layout methods, text, images and glass controls, in a winit window. |
 
 ## How close it is to macOS
 
@@ -56,6 +56,8 @@ CI runs the tests on llvmpipe through both Vulkan and OpenGL.
 ## Try it
 
 ```sh
+cargo run -p embun --example counter     # a window with two glass buttons
+cargo run -p embun --example photos      # a photo library with a glass sidebar and toolbar
 cargo run -p embun-render --example snapshot -- --out glass.png
 cargo test --workspace   # needs a GPU or a software one such as llvmpipe
 ```
