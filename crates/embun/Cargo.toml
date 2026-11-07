@@ -21,6 +21,7 @@ glyphon.workspace = true
 arboard.workspace = true
 accesskit.workspace = true
 accesskit_winit.workspace = true
+image.workspace = true
 
 [dev-dependencies]
 png.workspace = true

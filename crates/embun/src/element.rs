@@ -150,7 +150,7 @@ pub(crate) struct Style {
     pub line_height: Option<f32>,
 }
 
-/// RGBA8 pixels shown by [`image`]. Cheap to clone; the GPU copy is made
+/// RGBA8 pixels shown by [`image()`]. Cheap to clone; the GPU copy is made
 /// once per image.
 #[derive(Clone, Debug)]
 pub struct Image {
@@ -173,10 +173,41 @@ impl Image {
         Self { id: NEXT.fetch_add(1, Ordering::Relaxed), width, height, rgba }
     }
 
+    /// Decodes a PNG or JPEG from memory, for example `include_bytes!`.
+    /// JPEG orientation metadata is ignored.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
+        let decoded = image::load_from_memory(bytes).map_err(|e| ImageError(e.to_string()))?.into_rgba8();
+        let (width, height) = decoded.dimensions();
+        if width == 0 || height == 0 {
+            return Err(ImageError("the image is empty".into()));
+        }
+        Ok(Self::from_rgba(width, height, decoded.into_raw()))
+    }
+
+    /// Reads and decodes a PNG or JPEG file.
+    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, ImageError> {
+        let path = path.as_ref();
+        let bytes = std::fs::read(path).map_err(|e| ImageError(format!("{}: {e}", path.display())))?;
+        Self::from_bytes(&bytes).map_err(|ImageError(e)| ImageError(format!("{}: {e}", path.display())))
+    }
+
     pub fn size(&self) -> [u32; 2] {
         [self.width, self.height]
     }
 }
+
+/// Why an image could not be loaded: the file is missing, is not a PNG or
+/// JPEG, or is damaged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageError(String);
+
+impl std::fmt::Display for ImageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "cannot load image: {}", self.0)
+    }
+}
+
+impl std::error::Error for ImageError {}
 
 fn node<M>(kind: Kind) -> Element<M> {
     Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None, on_drag: None, checked: None, value: None }
@@ -766,5 +797,58 @@ impl<M> Element<M> {
     pub fn leading(mut self, multiple: f32) -> Self {
         self.style.line_height = Some(multiple);
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn encode(format: image::ImageFormat) -> Vec<u8> {
+        // 3 x 2: red, green, blue on top; white, black, half-transparent gray below.
+        let pixels = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 255, 255], [0, 0, 0, 255], [128, 128, 128, 128]];
+        let rgba: Vec<u8> = pixels.iter().flatten().copied().collect();
+        let img = image::RgbaImage::from_raw(3, 2, rgba).expect("pixels");
+        let mut out = std::io::Cursor::new(Vec::new());
+        match format {
+            // JPEG has no alpha.
+            image::ImageFormat::Jpeg => image::DynamicImage::ImageRgba8(img).to_rgb8().write_to(&mut out, format),
+            _ => img.write_to(&mut out, format),
+        }
+        .expect("encode");
+        out.into_inner()
+    }
+
+    #[test]
+    fn png_bytes_decode_to_the_same_pixels() {
+        let image = Image::from_bytes(&encode(image::ImageFormat::Png)).expect("png");
+        assert_eq!(image.size(), [3, 2]);
+        assert_eq!(&image.rgba[..4], [255, 0, 0, 255]);
+        assert_eq!(&image.rgba[20..24], [128, 128, 128, 128], "alpha survives");
+    }
+
+    #[test]
+    fn jpeg_bytes_decode_close_to_the_original_colors() {
+        let image = Image::from_bytes(&encode(image::ImageFormat::Jpeg)).expect("jpeg");
+        assert_eq!(image.size(), [3, 2]);
+        assert_eq!(image.rgba[3], 255, "opaque");
+        assert!(image.rgba[0] > 150 && image.rgba[1] < 120, "the first pixel is still reddish: {:?}", &image.rgba[..4]);
+    }
+
+    #[test]
+    fn open_reads_a_file_and_errors_name_the_path_and_the_problem() {
+        let dir = std::env::temp_dir().join(format!("embun-image-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let good = dir.join("a.png");
+        std::fs::write(&good, encode(image::ImageFormat::Png)).expect("write");
+        assert_eq!(Image::open(&good).expect("open").size(), [3, 2]);
+        let missing = Image::open(dir.join("missing.png")).expect_err("a missing file");
+        assert!(missing.to_string().contains("missing.png"), "{missing}");
+        let bad = dir.join("b.png");
+        std::fs::write(&bad, b"this is not an image").expect("write");
+        let err = Image::open(&bad).expect_err("not an image");
+        assert!(err.to_string().contains("b.png"), "{err}");
+        assert!(Image::from_bytes(&[]).is_err());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
