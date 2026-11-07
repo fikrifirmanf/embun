@@ -6,7 +6,7 @@ use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 use winit::window::{Window, WindowId};
 
@@ -90,8 +90,9 @@ impl std::error::Error for RunError {}
 
 /// Opens a window and runs `app` until the window closes.
 pub fn run<A: App + 'static>(app: A, settings: Settings) -> Result<(), RunError> {
-    let event_loop = EventLoop::new().map_err(RunError::EventLoop)?;
-    let mut shell = Shell { pending: Some((app, settings.clone())), settings, state: None, error: None };
+    let event_loop = EventLoop::<accesskit_winit::Event>::with_user_event().build().map_err(RunError::EventLoop)?;
+    let proxy = event_loop.create_proxy();
+    let mut shell = Shell { pending: Some((app, settings.clone())), settings, proxy, state: None, error: None };
     event_loop.run_app(&mut shell).map_err(RunError::EventLoop)?;
     match shell.error {
         Some(e) => Err(e),
@@ -102,6 +103,8 @@ pub fn run<A: App + 'static>(app: A, settings: Settings) -> Result<(), RunError>
 struct Shell<A: App> {
     pending: Option<(A, Settings)>,
     settings: Settings,
+    /// Carries screen reader requests from AccessKit into the event loop.
+    proxy: EventLoopProxy<accesskit_winit::Event>,
     state: Option<State<A>>,
     error: Option<RunError>,
 }
@@ -117,6 +120,7 @@ struct State<A: App> {
     modifiers: ModifiersState,
     /// Opened on first use; `None` if the system clipboard is unavailable.
     clipboard: Option<arboard::Clipboard>,
+    accessibility: accesskit_winit::Adapter,
     last_frame: Instant,
     // Dropped last: the surface must go before its window.
     window: Arc<Window>,
@@ -127,8 +131,12 @@ impl<A: App + 'static> Shell<A> {
         let Some((app, settings)) = self.pending.take() else { return Ok(()) };
         let attributes = Window::default_attributes()
             .with_title(settings.title.clone())
-            .with_inner_size(LogicalSize::new(settings.size[0] as f64, settings.size[1] as f64));
+            .with_inner_size(LogicalSize::new(settings.size[0] as f64, settings.size[1] as f64))
+            // Hidden until the accessibility adapter is attached, as AccessKit requires.
+            .with_visible(false);
         let window = Arc::new(event_loop.create_window(attributes).map_err(|e| RunError::Window(e.to_string()))?);
+        let accessibility = accesskit_winit::Adapter::with_event_loop_proxy(event_loop, &window, self.proxy.clone());
+        window.set_visible(true);
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(
             event_loop.owned_display_handle(),
         )));
@@ -181,6 +189,7 @@ impl<A: App + 'static> Shell<A> {
             instance,
             modifiers: ModifiersState::empty(),
             clipboard: None,
+            accessibility,
             last_frame: Instant::now(),
             window,
         });
@@ -188,7 +197,7 @@ impl<A: App + 'static> Shell<A> {
     }
 }
 
-impl<A: App + 'static> ApplicationHandler for Shell<A> {
+impl<A: App + 'static> ApplicationHandler<accesskit_winit::Event> for Shell<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Err(e) = self.start(event_loop) {
             self.error = Some(e);
@@ -196,9 +205,26 @@ impl<A: App + 'static> ApplicationHandler for Shell<A> {
         }
     }
 
+    fn user_event(&mut self, _: &ActiveEventLoop, event: accesskit_winit::Event) {
+        let Some(s) = self.state.as_mut() else { return };
+        let scale = s.window.scale_factor() as f32;
+        match event.window_event {
+            accesskit_winit::WindowEvent::InitialTreeRequested => {
+                let ui = &mut s.ui;
+                s.accessibility.update_if_active(|| ui.accessibility(scale));
+            }
+            accesskit_winit::WindowEvent::ActionRequested(request) => {
+                s.ui.accessibility_action(&request);
+                s.window.request_redraw();
+            }
+            accesskit_winit::WindowEvent::AccessibilityDeactivated => {}
+        }
+    }
+
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         let follow_system = self.settings.appearance.is_none();
         let Some(s) = self.state.as_mut() else { return };
+        s.accessibility.process_event(&s.window, &event);
         let scale = s.window.scale_factor() as f32;
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -340,7 +366,12 @@ impl<A: App> State<A> {
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("embun frame") });
         let scale = self.window.scale_factor() as f32;
+        let changed = self.ui.update();
         self.ui.render(&mut self.renderer, &self.device, &self.queue, &mut encoder, &view, [self.config.width, self.config.height], scale);
+        if changed {
+            let ui = &mut self.ui;
+            self.accessibility.update_if_active(|| ui.accessibility(scale));
+        }
         self.queue.submit([encoder.finish()]);
         self.window.pre_present_notify();
         self.queue.present(frame);

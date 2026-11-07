@@ -60,6 +60,22 @@ struct Edit {
     anchor: usize,
 }
 
+/// One element as a screen reader sees it.
+#[derive(Clone, Debug)]
+struct AccessNode {
+    id: u64,
+    role: accesskit::Role,
+    label: Option<String>,
+    value: Option<String>,
+    rect: Rect4,
+    children: Vec<u64>,
+    clickable: bool,
+    focusable: bool,
+}
+
+/// The id of the window node that holds the app's root element.
+const WINDOW_NODE: u64 = 1;
+
 /// A text field's change handler.
 type OnChange<M> = dyn Fn(String) -> M;
 
@@ -98,6 +114,7 @@ pub struct Ui<A: App> {
     pressed: Option<u64>,
     focused: Option<u64>,
     edit: Option<Edit>,
+    access: Vec<AccessNode>,
     highlight: HashMap<u64, (Animated, Animated)>,
     scene: Scene,
     dirty: bool,
@@ -125,6 +142,7 @@ impl<A: App> Ui<A> {
             pressed: None,
             focused: None,
             edit: None,
+            access: Vec::new(),
             highlight: HashMap::new(),
             scene: Scene::default(),
             dirty: true,
@@ -218,6 +236,10 @@ impl<A: App> Ui<A> {
             });
             let _ = i;
         }
+        self.access = nodes
+            .iter()
+            .map(|n| AccessNode { children: n.children.iter().map(|&c| nodes[c].id).collect(), ..access_node(n) })
+            .collect();
         // Forget state of controls that are gone.
         let alive: std::collections::HashSet<u64> = nodes.iter().map(|n| n.id).collect();
         self.highlight.retain(|id, _| alive.contains(id));
@@ -251,6 +273,78 @@ impl<A: App> Ui<A> {
         });
         self.scene = scene::build(&nodes, &self.theme, &highlight, self.focused, caret.as_ref());
         true
+    }
+
+    /// The whole UI as an accessibility tree for screen readers, with bounds
+    /// in physical pixels for a window at `scale_factor`.
+    pub fn accessibility(&mut self, scale_factor: f32) -> accesskit::TreeUpdate {
+        self.update();
+        let s = scale_factor as f64;
+        let mut nodes = Vec::with_capacity(self.access.len() + 1);
+        let mut window = accesskit::Node::new(accesskit::Role::Window);
+        if let Some(root) = self.access.first() {
+            window.set_children(vec![accesskit::NodeId(root.id)]);
+        }
+        nodes.push((accesskit::NodeId(WINDOW_NODE), window));
+        for a in &self.access {
+            let mut node = accesskit::Node::new(a.role);
+            if let Some(label) = &a.label {
+                node.set_label(label.clone());
+            }
+            if let Some(value) = &a.value {
+                node.set_value(value.clone());
+            }
+            let [x, y, w, h] = a.rect;
+            node.set_bounds(accesskit::Rect { x0: x as f64 * s, y0: y as f64 * s, x1: (x + w) as f64 * s, y1: (y + h) as f64 * s });
+            node.set_children(a.children.iter().map(|&c| accesskit::NodeId(c)).collect::<Vec<_>>());
+            if a.clickable {
+                node.add_action(accesskit::Action::Click);
+            }
+            if a.focusable {
+                node.add_action(accesskit::Action::Focus);
+            }
+            if a.role == accesskit::Role::TextInput {
+                node.add_action(accesskit::Action::SetValue);
+                node.add_action(accesskit::Action::ReplaceSelectedText);
+            }
+            nodes.push((accesskit::NodeId(a.id), node));
+        }
+        let mut tree = accesskit::TreeInfo::new(accesskit::NodeId(WINDOW_NODE));
+        tree.toolkit_name = Some("Embun".into());
+        tree.toolkit_version = Some(env!("CARGO_PKG_VERSION").into());
+        accesskit::TreeUpdate {
+            nodes,
+            tree: Some(tree),
+            tree_id: accesskit::TreeId::ROOT,
+            focus: accesskit::NodeId(self.focused.unwrap_or(WINDOW_NODE)),
+        }
+    }
+
+    /// Carries out an action a screen reader asked for: pressing a button,
+    /// moving focus, or changing a text field.
+    pub fn accessibility_action(&mut self, request: &accesskit::ActionRequest) {
+        let id = request.target_node.0;
+        let Some(node) = self.access.iter().find(|a| a.id == id).cloned() else { return };
+        match request.action {
+            accesskit::Action::Click if node.clickable => {
+                if let Some(message) = self.messages.get(&id).cloned() {
+                    self.send(message);
+                }
+            }
+            accesskit::Action::Focus if node.focusable => self.focus(Some(id)),
+            accesskit::Action::SetValue | accesskit::Action::ReplaceSelectedText if node.role == accesskit::Role::TextInput => {
+                let Some(accesskit::ActionData::Value(text)) = &request.data else { return };
+                if self.focused != Some(id) {
+                    self.focus(Some(id));
+                }
+                if request.action == accesskit::Action::SetValue {
+                    self.key(Key::SelectAll);
+                }
+                let text = text.to_string();
+                self.insert_text(&text);
+            }
+            _ => {}
+        }
     }
 
     /// True while a text field has keyboard focus: typed text goes to it.
@@ -587,6 +681,42 @@ impl<A: App> Ui<A> {
     }
 }
 
+fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
+    use accesskit::Role as R;
+    let el = n.el;
+    let (role, label, value) = match &el.kind {
+        Kind::Text(text) => (R::Label, Some(text.clone()), None),
+        Kind::Image(_) => (R::Image, el.label.clone(), None),
+        Kind::Input { value, placeholder } => {
+            let label = el.label.clone().or_else(|| (!placeholder.is_empty()).then(|| placeholder.clone()));
+            (R::TextInput, label, Some(value.clone()))
+        }
+        Kind::Div => {
+            let role = match el.role {
+                Role::Button => R::Button,
+                Role::Toolbar => R::Toolbar,
+                Role::Navigation => R::Navigation,
+                Role::Heading => R::Heading,
+                Role::Image => R::Image,
+                Role::TextField => R::TextInput,
+                Role::Generic if el.style.scroll_y => R::ScrollView,
+                Role::Generic => R::GenericContainer,
+            };
+            (role, el.label.clone(), None)
+        }
+    };
+    AccessNode {
+        id: n.id,
+        role,
+        label,
+        value,
+        rect: n.rect,
+        children: Vec::new(),
+        clickable: el.on_press.is_some(),
+        focusable: el.on_press.is_some() || el.on_input.is_some(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -807,6 +937,80 @@ mod tests {
         let caret = ui.scene().caret.expect("caret");
         assert!(caret.x > 8.0, "caret should move past the text, at {}", caret.x);
         assert_eq!(texts(ui.scene()), ["Hi"]);
+    }
+
+    #[test]
+    fn the_accessibility_tree_names_controls_and_follows_focus() {
+        use accesskit::{Action, NodeId, Role as R};
+        let mut ui = Ui::new(
+            Library::default(),
+            Theme::default(),
+            [400.0, 300.0],
+        );
+        let tree = ui.accessibility(2.0);
+        let find = |tree: &accesskit::TreeUpdate, role: R| tree.nodes.iter().find(|(_, n)| n.role() == role).map(|(id, n)| (*id, n.clone()));
+        let (_, window) = find(&tree, R::Window).expect("window node");
+        assert_eq!(window.children().len(), 1);
+        let (button_id, button) = find(&tree, R::Button).expect("button");
+        assert_eq!(button.label(), Some("Save"));
+        assert!(button.supports_action(Action::Click) && button.supports_action(Action::Focus));
+        let bounds = button.bounds().expect("bounds");
+        assert!(bounds.x1 > bounds.x0 && bounds.y1 > bounds.y0, "bounds {bounds:?}");
+        let (_, field) = find(&tree, R::TextInput).expect("text field");
+        assert_eq!((field.label(), field.value()), (Some("Title"), Some("Draft")));
+        assert_eq!(tree.focus, NodeId(WINDOW_NODE));
+        ui.key(Key::Tab);
+        assert_eq!(ui.accessibility(2.0).focus, button_id);
+    }
+
+    #[test]
+    fn screen_reader_actions_press_buttons_and_set_text() {
+        use accesskit::{Action, ActionData, ActionRequest, Role as R, TreeId};
+        let mut ui = Ui::new(Library::default(), Theme::default(), [400.0, 300.0]);
+        let tree = ui.accessibility(1.0);
+        let id_of = |role: R| tree.nodes.iter().find(|(_, n)| n.role() == role).map(|(id, _)| *id).expect("node");
+        let request = |action, target_node, data| ActionRequest { action, target_tree: TreeId::ROOT, target_node, data };
+        ui.accessibility_action(&request(Action::Click, id_of(R::Button), None));
+        assert_eq!(ui.app().saves, 1);
+        ui.accessibility_action(&request(Action::SetValue, id_of(R::TextInput), Some(ActionData::Value("Final".into()))));
+        assert_eq!(ui.app().title, "Final");
+        // A Click on a node that cannot be clicked does nothing.
+        ui.accessibility_action(&request(Action::Click, id_of(R::TextInput), None));
+        assert_eq!(ui.app().saves, 1);
+    }
+
+    struct Library {
+        title: String,
+        saves: u32,
+    }
+
+    impl Default for Library {
+        fn default() -> Self {
+            Self { title: "Draft".into(), saves: 0 }
+        }
+    }
+
+    #[derive(Clone)]
+    enum LibraryMsg {
+        Title(String),
+        Save,
+    }
+
+    impl App for Library {
+        type Message = LibraryMsg;
+        fn update(&mut self, m: LibraryMsg) {
+            match m {
+                LibraryMsg::Title(t) => self.title = t,
+                LibraryMsg::Save => self.saves += 1,
+            }
+        }
+        fn view(&self, _: &Theme) -> Element<LibraryMsg> {
+            column()
+                .p_4()
+                .gap_2()
+                .child(crate::button("Save").on_press(LibraryMsg::Save))
+                .child(crate::text_input(self.title.clone(), LibraryMsg::Title).placeholder("Title"))
+        }
     }
 
     #[test]

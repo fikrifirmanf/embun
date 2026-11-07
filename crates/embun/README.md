@@ -65,9 +65,10 @@ Pressing or hovering a glass button only changes the glass layer, so the frost b
 - Controls: `button`, `icon_button`, prominent buttons, `toolbar_group` and `toolbar_item`, `sidebar`, `sidebar_item` and `sidebar_heading`. Button sizes follow the macOS 27.0.1 captures.
 - Pointer, scroll wheel and trackpad input. Tab and Shift-Tab move keyboard focus between buttons, and Space or Return presses the focused one.
 - Light and dark mode from the system, and glass that frosts more when the window loses focus, as on macOS.
+- Screen readers (VoiceOver, Narrator, Orca) through [AccessKit](https://accesskit.dev): every element is in the accessibility tree with its role, name and bounds, buttons can be pressed and text fields edited from the screen reader, and keyboard focus is shared with it.
 - `snapshot` renders an app into memory, for tests and screenshots.
 
-Not there yet: menus and popovers, screen reader support, multi-line text editing, moving the cursor word by word, and images from files. The cursor moves by character, so an emoji made of several characters takes several presses.
+Not there yet: menus and popovers, multi-line text editing, moving the cursor word by word, and images from files. The cursor moves by character, so an emoji made of several characters takes several presses.
 
 ## Examples
 

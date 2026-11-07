@@ -19,6 +19,8 @@ winit.workspace = true
 taffy.workspace = true
 glyphon.workspace = true
 arboard.workspace = true
+accesskit.workspace = true
+accesskit_winit.workspace = true
 
 [dev-dependencies]
 png.workspace = true
