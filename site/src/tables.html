@@ -1,0 +1,25 @@
+<p><code>table(theme, columns, rows, cell)</code> is a header row over a list of rows. Only the rows on screen are built, so a million rows cost the same as ten and scroll as fast as <a href="lists.html">a list</a>. Your app owns the data, the sort order and the selection.</p>
+{{example table_files}}
+
+<h2>Columns</h2>
+<p>A <code>Column</code> is a title and a width. <code>Column::new</code> shares the leftover width equally with the other growing columns, <code>grow(2.0)</code> takes two parts instead of one, and <code>width(110.0)</code> fixes it in pixels. <code>right()</code> aligns the title and the cells to the right, for numbers.</p>
+
+<h2>Cells</h2>
+<p><code>cell(row, column)</code> builds one cell, and can return any element. For text, return <code>text(...).no_wrap()</code>: the text stays on one line and is cut at the column edge instead of wrapping into the next row. <code>Element::clip</code> does the same cutting for anything else.</p>
+
+<h2>Selection and sorting</h2>
+<ul>
+  <li><code>selected(Some(index))</code> highlights a row, and <code>on_select</code> turns a row index into the message pressing it sends.</li>
+  <li>Up and Down on a focused row select the row above or below, and scroll it into view even when it has not been built yet.</li>
+  <li><code>sorted_by(column, ascending)</code> shows the arrow on a header, and <code>on_sort</code> makes the headers pressable. The table does not sort anything: sort your data and pass it back.</li>
+</ul>
+{{rust}}
+Msg::Sort(column) => {
+    self.ascending = if self.column == column { !self.ascending } else { true };
+    self.column = column;
+    self.files.sort_by(/* by self.column, reversed unless self.ascending */);
+}
+{{/rust}}
+
+<h2>What is not there yet</h2>
+<p>Columns cannot be resized by dragging, rows cannot be selected in groups, and Tab walks through every built row instead of stopping once on the table. Screen readers see the table, its rows, cells and headers and which row is selected, but not the row and column counts.</p>

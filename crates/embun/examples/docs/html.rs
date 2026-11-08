@@ -10,6 +10,8 @@ const PAGES: &[(&str, &str)] = &[
     ("text", "Text and images"),
     ("buttons", "Buttons and toolbars"),
     ("controls", "Controls"),
+    ("progress", "Progress, badges and tooltips"),
+    ("tables", "Tables"),
     ("fields", "Text fields"),
     ("lists", "Lists"),
     ("menus", "Menus and dialogs"),

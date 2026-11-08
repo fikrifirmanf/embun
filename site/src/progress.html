@@ -1,0 +1,21 @@
+<p>Feedback pieces that tell the user something is happening, how much, or what a control does.</p>
+
+<h2>Progress bar</h2>
+<p><code>progress(theme, value)</code> takes a value from 0 to 1 and clamps anything else. It is 200 px wide and 6 px tall unless you set <code>w</code>. Screen readers get the value, and a name when you call <code>label</code>.</p>
+{{example progress_bars}}
+
+<h2>When you cannot say how long</h2>
+<p><code>progress_indeterminate</code> sweeps a segment back and forth along the bar, and <code>spinner</code> shows three dots that hop one after another. Both keep the window redrawing while they are on screen, and stop when you remove them. Give each a <code>label</code> such as "Loading", because there is no value to read out.</p>
+{{example progress_unknown}}
+
+<h2>Badge</h2>
+<p><code>badge(theme, label)</code> is a small accent-colored pill for a count. It is 18 px tall and grows with its label. Use <code>.bg(...)</code> for another color.</p>
+{{example badges}}
+
+<h2>Divider</h2>
+<p><code>divider(theme)</code> is a 1 px line across its parent, and <code>vertical_divider(theme)</code> runs down it.</p>
+{{example dividers}}
+
+<h2>Tooltip</h2>
+<p><code>tooltip(text)</code> on any element, or on a button, shows a small box near the pointer after it has rested there for about half a second. It also appears when the pointer rests on anything inside the element. Moving off, pressing or leaving the window hides it. Tooltips are not shown for keyboard focus yet.</p>
+{{example tooltip_example}}

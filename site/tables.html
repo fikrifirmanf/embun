@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tables · Embun</title>
+<meta name="description" content="Embun is a Rust UI toolkit with glass controls that match macOS 27, drawn with wgpu.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3c5 7 9 11 9 16a9 9 0 0 1-18 0c0-5 4-9 9-16z' fill='%230a60d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script>
+  try {
+    var saved = localStorage.getItem("embun-theme");
+    if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="./">Embun</a>
+  <div class="search">
+    <label class="sr" for="q">Search the docs</label>
+    <input id="q" type="search" placeholder="Search" autocomplete="off" aria-controls="results">
+    <ul id="results" hidden></ul>
+  </div>
+  <nav class="links" aria-label="Project">
+    <a href="https://github.com/fikrifirmanf/embun">GitHub</a>
+    <a href="https://docs.rs/embun">API reference</a>
+    <a href="https://crates.io/crates/embun">crates.io</a>
+  </nav>
+  <button class="mode" type="button" id="mode" aria-label="Switch between light and dark previews">
+    <span class="mode-light">Light</span><span class="mode-dark">Dark</span>
+  </button>
+</header>
+<div class="shell">
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="progress.html">Progress, badges and tooltips</a></li><li><a href="tables.html" aria-current="page">Tables</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
+  <main id="main">
+    <h1>Tables</h1>
+    <p><code>table(theme, columns, rows, cell)</code> is a header row over a list of rows. Only the rows on screen are built, so a million rows cost the same as ten and scroll as fast as <a href="lists.html">a list</a>. Your app owns the data, the sort order and the selection.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/table_files-light.png" alt="A table of five files with Name, Kind and Size columns, the second row selected and Name sorted ascending" width="520" height="250"><img class="dark" src="img/table_files-dark.png" alt="A table of five files with Name, Kind and Size columns, the second row selected and Name sorted ascending" width="520" height="250"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">table_files</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="k">const</span> <span class="t">FILES</span>: [(&amp;str, &amp;str, &amp;str); <span class="n">5</span>] = [
+        (<span class="s">&quot;Notes.txt&quot;</span>, <span class="s">&quot;Text&quot;</span>, <span class="s">&quot;2 KB&quot;</span>),
+        (<span class="s">&quot;Photo.jpg&quot;</span>, <span class="s">&quot;Image&quot;</span>, <span class="s">&quot;3.1 MB&quot;</span>),
+        (<span class="s">&quot;Budget.csv&quot;</span>, <span class="s">&quot;Spreadsheet&quot;</span>, <span class="s">&quot;48 KB&quot;</span>),
+        (<span class="s">&quot;Archive.zip&quot;</span>, <span class="s">&quot;Archive&quot;</span>, <span class="s">&quot;12 MB&quot;</span>),
+        (<span class="s">&quot;Readme.md&quot;</span>, <span class="s">&quot;Markdown&quot;</span>, <span class="s">&quot;6 KB&quot;</span>),
+    ];
+    <span class="f">table</span>(theme, vec![<span class="t">Column</span>::<span class="f">new</span>(<span class="s">&quot;Name&quot;</span>).<span class="f">grow</span>(<span class="n">2.0</span>), <span class="t">Column</span>::<span class="f">new</span>(<span class="s">&quot;Kind&quot;</span>).<span class="f">width</span>(<span class="n">110.0</span>), <span class="t">Column</span>::<span class="f">new</span>(<span class="s">&quot;Size&quot;</span>).<span class="f">width</span>(<span class="n">80.0</span>).<span class="f">right</span>()], <span class="t">FILES</span>.<span class="f">len</span>(), |row, column| {
+        <span class="k">let</span> file = <span class="t">FILES</span>[row];
+        <span class="f">text</span>([file.<span class="n">0</span>, file.<span class="n">1</span>, file.<span class="n">2</span>][column]).<span class="f">no_wrap</span>()
+    })
+    .<span class="f">selected</span>(<span class="t">Some</span>(<span class="n">1</span>))
+    .<span class="f">on_select</span>(<span class="t">Msg</span>::<span class="t">Row</span>)
+    .<span class="f">sorted_by</span>(<span class="n">0</span>, true)
+    .<span class="f">on_sort</span>(<span class="t">Msg</span>::<span class="t">Sort</span>)
+    .<span class="f">w</span>(<span class="n">460.0</span>)
+    .<span class="f">h</span>(<span class="n">190.0</span>)
+    .<span class="f">into</span>()
+}</code></pre></figure>
+
+<h2 id="columns">Columns</h2>
+<p>A <code>Column</code> is a title and a width. <code>Column::new</code> shares the leftover width equally with the other growing columns, <code>grow(2.0)</code> takes two parts instead of one, and <code>width(110.0)</code> fixes it in pixels. <code>right()</code> aligns the title and the cells to the right, for numbers.</p>
+
+<h2 id="cells">Cells</h2>
+<p><code>cell(row, column)</code> builds one cell, and can return any element. For text, return <code>text(...).no_wrap()</code>: the text stays on one line and is cut at the column edge instead of wrapping into the next row. <code>Element::clip</code> does the same cutting for anything else.</p>
+
+<h2 id="selection-and-sorting">Selection and sorting</h2>
+<ul>
+  <li><code>selected(Some(index))</code> highlights a row, and <code>on_select</code> turns a row index into the message pressing it sends.</li>
+  <li>Up and Down on a focused row select the row above or below, and scroll it into view even when it has not been built yet.</li>
+  <li><code>sorted_by(column, ascending)</code> shows the arrow on a header, and <code>on_sort</code> makes the headers pressable. The table does not sort anything: sort your data and pass it back.</li>
+</ul>
+<pre class="code" tabindex="0"><code><span class="t">Msg</span>::<span class="t">Sort</span>(column) =&gt; {
+    <span class="k">self</span>.ascending = <span class="k">if</span> <span class="k">self</span>.column == column { !<span class="k">self</span>.ascending } <span class="k">else</span> { true };
+    <span class="k">self</span>.column = column;
+    <span class="k">self</span>.files.<span class="f">sort_by</span>(/* by <span class="k">self</span>.column, reversed unless <span class="k">self</span>.ascending */);
+}</code></pre>
+
+<h2 id="what-is-not-there-yet">What is not there yet</h2>
+<p>Columns cannot be resized by dragging, rows cannot be selected in groups, and Tab walks through every built row instead of stopping once on the table. Screen readers see the table, its rows, cells and headers and which row is selected, but not the row and column counts.</p>
+
+  </main>
+</div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    function current() {
+      return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    }
+    var input = document.getElementById("q"), results = document.getElementById("results"), index = null;
+    function load(then) {
+      if (index) return then();
+      fetch("search.json").then(function (r) { return r.json(); }).then(function (data) { index = data; then(); }).catch(function () {});
+    }
+    function show() {
+      var terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      results.textContent = "";
+      if (!terms.length || !index) { results.hidden = true; return; }
+      var hits = [];
+      index.forEach(function (e) {
+        var heading = (e.heading || e.page).toLowerCase(), all = heading + " " + e.text.toLowerCase();
+        if (terms.every(function (t) { return all.indexOf(t) >= 0; })) {
+          hits.push({ e: e, score: terms.filter(function (t) { return heading.indexOf(t) >= 0; }).length });
+        }
+      });
+      hits.sort(function (a, b) { return b.score - a.score; });
+      hits.slice(0, 8).forEach(function (h) {
+        var li = document.createElement("li"), a = document.createElement("a"), t = document.createElement("span"), p = document.createElement("span");
+        a.href = h.e.href;
+        t.className = "r-title"; t.textContent = h.e.heading || h.e.page;
+        p.className = "r-page"; p.textContent = h.e.heading ? h.e.page : "Page";
+        a.append(t, p); li.append(a); results.append(li);
+      });
+      if (!hits.length) {
+        var none = document.createElement("li"); none.className = "none"; none.textContent = "No results"; results.append(none);
+      }
+      results.hidden = false;
+    }
+    input.addEventListener("focus", function () { load(show); });
+    input.addEventListener("input", function () { load(show); });
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { input.value = ""; show(); }
+      if (ev.key === "ArrowDown") { var a = results.querySelector("a"); if (a) { a.focus(); ev.preventDefault(); } }
+      if (ev.key === "Enter") { var f = results.querySelector("a"); if (f) location.href = f.href; }
+    });
+    results.addEventListener("keydown", function (ev) {
+      var a = document.activeElement;
+      if (ev.key === "ArrowDown" && a.parentNode.nextElementSibling) { a.parentNode.nextElementSibling.querySelector("a").focus(); ev.preventDefault(); }
+      if (ev.key === "ArrowUp") { var prev = a.parentNode.previousElementSibling; (prev ? prev.querySelector("a") : input).focus(); ev.preventDefault(); }
+      if (ev.key === "Escape") { input.focus(); input.value = ""; show(); }
+    });
+    document.addEventListener("click", function (ev) { if (!ev.target.closest(".search")) results.hidden = true; });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { ev.preventDefault(); input.focus(); }
+    });
+    document.getElementById("mode").addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("embun-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>

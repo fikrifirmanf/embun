@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+### Added
+
+- `table`, with `Column`: a header row over a virtual list of rows, with fixed and growing column widths, right-aligned columns, sort arrows and pressable headers, row selection, and Up and Down to step the selection and scroll it into view. Screen readers see the table, rows, cells and headers.
+- `dropdown`, a pop-up picker that opens a glass menu. `disclosure`, `badge`, `divider` and `vertical_divider`.
+- `progress`, `progress_indeterminate` and `spinner`. The last two keep frames coming while they are on screen.
+- `Element::tooltip` and `Button::tooltip`: a box near the pointer after it rests for 0.6 s.
+- `Element::on_dismiss`: sends a message on Escape or on a press outside the element, and that press does nothing else. `Element::clip` cuts children at the element's edges and `Element::no_wrap` keeps text on one line.
+- Left and Right move between tabs and segments, selecting each. Up and Down move between menu items.
+- New roles `ProgressBar`, `Table`, `Row`, `ColumnHeader` and `Cell`.
+- Docs pages for each of these, and a search box on the docs site.
+
+### Changed
+
+- Breaking: `Role` has five new variants, so an exhaustive `match` on it needs new arms.
+- Overlays are no longer cut by a scrolling parent.
+
 ## 0.2.0 - 2026-11-08
 
 ### Added

@@ -30,6 +30,8 @@ pub struct Example {
     /// Glass shows only over content, so glass examples sit on a photo and the
     /// rest sit on a plain surface.
     pub photo: bool,
+    /// Runs against the UI before the snapshot, to hover or let an animation run.
+    pub prepare: Option<fn(&mut Ui<Preview>)>,
     pub source: Source,
 }
 
@@ -39,36 +41,55 @@ pub const COUNTER: &str = include_str!("../support/counter.rs");
 pub fn examples() -> Vec<Example> {
     use Source::Snippet;
     vec![
-        Example { name: "counter", alt: "A large number 0 above two buttons, Decrease and Increase", size: [420.0, 300.0], photo: false, source: Source::Counter },
-        Example { name: "button_basic", alt: "A Cancel button and a blue Save button over a landscape", size: [360.0, 140.0], photo: true, source: Snippet(snippets::button_basic) },
-        Example { name: "button_sizes", alt: "Four buttons from Small to Extra large", size: [640.0, 140.0], photo: true, source: Snippet(snippets::button_sizes) },
-        Example { name: "icon_buttons", alt: "Three round buttons: plus, minus and a blue close button", size: [360.0, 140.0], photo: true, source: Snippet(snippets::icon_buttons) },
-        Example { name: "toolbar", alt: "A pair of back and forward buttons beside a blue Share button", size: [420.0, 140.0], photo: true, source: Snippet(snippets::toolbar) },
-        Example { name: "sidebar_list", alt: "A glass sidebar with a Library heading and three albums, All Photos selected", size: [420.0, 260.0], photo: true, source: Snippet(snippets::sidebar_list) },
-        Example { name: "switches", alt: "Two switches, the first on and the second off", size: [360.0, 120.0], photo: false, source: Snippet(snippets::switches) },
-        Example { name: "checkboxes", alt: "Two checkboxes, the first checked", size: [360.0, 150.0], photo: false, source: Snippet(snippets::checkboxes) },
-        Example { name: "radios", alt: "Three radio buttons with Medium selected", size: [360.0, 190.0], photo: false, source: Snippet(snippets::radios) },
-        Example { name: "sliders", alt: "A slider at about one third", size: [360.0, 120.0], photo: false, source: Snippet(snippets::sliders) },
-        Example { name: "segmented_control", alt: "A segmented control with Day, Week and Month, Week selected", size: [360.0, 120.0], photo: false, source: Snippet(snippets::segmented_control) },
-        Example { name: "layout_stack", alt: "Three tiles in a row above two tiles in a column", size: [360.0, 200.0], photo: false, source: Snippet(snippets::layout_stack) },
-        Example { name: "layout_grow", alt: "A wide gray tile between two small blue tiles", size: [400.0, 120.0], photo: false, source: Snippet(snippets::layout_grow) },
-        Example { name: "layout_wrap", alt: "Seven rounded tags wrapping onto several lines", size: [380.0, 150.0], photo: false, source: Snippet(snippets::layout_wrap) },
-        Example { name: "layout_absolute", alt: "A card with one tile in its top left corner and one in its bottom right", size: [380.0, 200.0], photo: false, source: Snippet(snippets::layout_absolute) },
-        Example { name: "style_card", alt: "A white rounded card titled Storage with a line of gray text", size: [380.0, 160.0], photo: false, source: Snippet(snippets::style_card) },
-        Example { name: "style_gradient", alt: "A rounded rectangle with a gradient from orange to blue", size: [380.0, 160.0], photo: false, source: Snippet(snippets::style_gradient) },
-        Example { name: "text_styles", alt: "Four lines of text from a large bold title down to a small caption", size: [380.0, 180.0], photo: false, source: Snippet(snippets::text_styles) },
-        Example { name: "text_wrapping", alt: "A centered paragraph wrapped to three lines", size: [380.0, 150.0], photo: false, source: Snippet(snippets::text_wrapping) },
-        Example { name: "image_scaled", alt: "A rounded square image with a red, green and blue gradient", size: [380.0, 180.0], photo: false, source: Snippet(snippets::image_scaled) },
-        Example { name: "field_single", alt: "A text field holding the word Embun above an empty field with the placeholder Search", size: [380.0, 150.0], photo: false, source: Snippet(snippets::field_single) },
-        Example { name: "field_multi", alt: "A text area with two lines of text, the second wrapping", size: [380.0, 170.0], photo: false, source: Snippet(snippets::field_multi) },
-        Example { name: "list_rows", alt: "A list showing items 1 to 6 of a million", size: [380.0, 240.0], photo: false, source: Snippet(snippets::list_rows) },
-        Example { name: "menu_example", alt: "A glass menu with two sort options, one checked, a separator and Share", size: [380.0, 220.0], photo: true, source: Snippet(snippets::menu_example) },
-        Example { name: "dialog_example", alt: "A dimmed window with a dialog asking Discard changes with two buttons", size: [420.0, 260.0], photo: true, source: Snippet(snippets::dialog_example) },
-        Example { name: "theme_palette", alt: "Five color swatches: background, surface, label, separator and accent", size: [420.0, 140.0], photo: false, source: Snippet(snippets::theme_palette) },
+        Example { name: "counter", alt: "A large number 0 above two buttons, Decrease and Increase", size: [420.0, 300.0], photo: false, prepare: None, source: Source::Counter },
+        Example { name: "button_basic", alt: "A Cancel button and a blue Save button over a landscape", size: [360.0, 140.0], photo: true, prepare: None, source: Snippet(snippets::button_basic) },
+        Example { name: "button_sizes", alt: "Four buttons from Small to Extra large", size: [640.0, 140.0], photo: true, prepare: None, source: Snippet(snippets::button_sizes) },
+        Example { name: "icon_buttons", alt: "Three round buttons: plus, minus and a blue close button", size: [360.0, 140.0], photo: true, prepare: None, source: Snippet(snippets::icon_buttons) },
+        Example { name: "toolbar", alt: "A pair of back and forward buttons beside a blue Share button", size: [420.0, 140.0], photo: true, prepare: None, source: Snippet(snippets::toolbar) },
+        Example { name: "sidebar_list", alt: "A glass sidebar with a Library heading and three albums, All Photos selected", size: [420.0, 260.0], photo: true, prepare: None, source: Snippet(snippets::sidebar_list) },
+        Example { name: "switches", alt: "Two switches, the first on and the second off", size: [360.0, 120.0], photo: false, prepare: None, source: Snippet(snippets::switches) },
+        Example { name: "checkboxes", alt: "Two checkboxes, the first checked", size: [360.0, 150.0], photo: false, prepare: None, source: Snippet(snippets::checkboxes) },
+        Example { name: "radios", alt: "Three radio buttons with Medium selected", size: [360.0, 190.0], photo: false, prepare: None, source: Snippet(snippets::radios) },
+        Example { name: "sliders", alt: "A slider at about one third", size: [360.0, 120.0], photo: false, prepare: None, source: Snippet(snippets::sliders) },
+        Example { name: "segmented_control", alt: "A segmented control with Day, Week and Month, Week selected", size: [360.0, 120.0], photo: false, prepare: None, source: Snippet(snippets::segmented_control) },
+        Example { name: "layout_stack", alt: "Three tiles in a row above two tiles in a column", size: [360.0, 200.0], photo: false, prepare: None, source: Snippet(snippets::layout_stack) },
+        Example { name: "layout_grow", alt: "A wide gray tile between two small blue tiles", size: [400.0, 120.0], photo: false, prepare: None, source: Snippet(snippets::layout_grow) },
+        Example { name: "layout_wrap", alt: "Seven rounded tags wrapping onto several lines", size: [380.0, 150.0], photo: false, prepare: None, source: Snippet(snippets::layout_wrap) },
+        Example { name: "layout_absolute", alt: "A card with one tile in its top left corner and one in its bottom right", size: [380.0, 200.0], photo: false, prepare: None, source: Snippet(snippets::layout_absolute) },
+        Example { name: "style_card", alt: "A white rounded card titled Storage with a line of gray text", size: [380.0, 160.0], photo: false, prepare: None, source: Snippet(snippets::style_card) },
+        Example { name: "style_gradient", alt: "A rounded rectangle with a gradient from orange to blue", size: [380.0, 160.0], photo: false, prepare: None, source: Snippet(snippets::style_gradient) },
+        Example { name: "text_styles", alt: "Four lines of text from a large bold title down to a small caption", size: [380.0, 180.0], photo: false, prepare: None, source: Snippet(snippets::text_styles) },
+        Example { name: "text_wrapping", alt: "A centered paragraph wrapped to three lines", size: [380.0, 150.0], photo: false, prepare: None, source: Snippet(snippets::text_wrapping) },
+        Example { name: "image_scaled", alt: "A rounded square image with a red, green and blue gradient", size: [380.0, 180.0], photo: false, prepare: None, source: Snippet(snippets::image_scaled) },
+        Example { name: "field_single", alt: "A text field holding the word Embun above an empty field with the placeholder Search", size: [380.0, 150.0], photo: false, prepare: None, source: Snippet(snippets::field_single) },
+        Example { name: "field_multi", alt: "A text area with two lines of text, the second wrapping", size: [380.0, 170.0], photo: false, prepare: None, source: Snippet(snippets::field_multi) },
+        Example { name: "list_rows", alt: "A list showing items 1 to 6 of a million", size: [380.0, 240.0], photo: false, prepare: None, source: Snippet(snippets::list_rows) },
+        Example { name: "menu_example", alt: "A glass menu with two sort options, one checked, a separator and Share", size: [380.0, 220.0], photo: true, prepare: None, source: Snippet(snippets::menu_example) },
+        Example { name: "dialog_example", alt: "A dimmed window with a dialog asking Discard changes with two buttons", size: [420.0, 260.0], photo: true, prepare: None, source: Snippet(snippets::dialog_example) },
+        Example { name: "theme_palette", alt: "Five color swatches: background, surface, label, separator and accent", size: [420.0, 140.0], photo: false, prepare: None, source: Snippet(snippets::theme_palette) },
+        Example { name: "progress_bars", alt: "Two progress bars, one filled about two thirds and one a quarter", size: [380.0, 130.0], photo: false, prepare: None, source: Snippet(snippets::progress_bars) },
+        Example { name: "progress_unknown", alt: "A progress bar with a short blue segment and three dots mid-hop", size: [380.0, 130.0], photo: false, prepare: Some(advance), source: Snippet(snippets::progress_unknown) },
+        Example { name: "badges", alt: "Three labels, Inbox, Mentions and Drafts, each with a blue count pill", size: [460.0, 110.0], photo: false, prepare: None, source: Snippet(snippets::badges) },
+        Example { name: "dividers", alt: "The word Above, a thin line, then the word Below", size: [380.0, 130.0], photo: false, prepare: None, source: Snippet(snippets::dividers) },
+        Example { name: "tooltip_example", alt: "A Save button with a small box reading Save the document below it", size: [380.0, 150.0], photo: true, prepare: Some(hover_center), source: Snippet(snippets::tooltip_example) },
+        Example { name: "disclosure_example", alt: "An expanded Advanced group with two checkboxes, a line, and a collapsed About group", size: [380.0, 220.0], photo: false, prepare: None, source: Snippet(snippets::disclosure_example) },
+        Example { name: "dropdown_closed", alt: "A glass pop-up button showing Medium with a chevron", size: [380.0, 110.0], photo: true, prepare: None, source: Snippet(snippets::dropdown_closed) },
+        Example { name: "dropdown_open", alt: "The pop-up button open, with a menu of Small, Medium and Large, Medium checked", size: [380.0, 200.0], photo: true, prepare: None, source: Snippet(snippets::dropdown_open) },
+        Example { name: "table_files", alt: "A table of five files with Name, Kind and Size columns, the second row selected and Name sorted ascending", size: [520.0, 250.0], photo: false, prepare: None, source: Snippet(snippets::table_files) },
     ]
 }
 
-struct Preview {
+fn advance(ui: &mut Ui<Preview>) {
+    ui.tick(0.3);
+}
+
+fn hover_center(ui: &mut Ui<Preview>) {
+    let [w, h] = ui.viewport();
+    ui.pointer_moved([w / 2.0, h / 2.0]);
+    ui.tick(0.7);
+}
+
+pub struct Preview {
     build: fn(&Theme) -> Element<Msg>,
     backdrop: Image,
     photo: bool,
@@ -118,6 +139,9 @@ fn render_images(out: &Path) {
                 Source::Snippet(build) => {
                     let preview = Preview { build, backdrop: landscape(index as u32 + 1, width as u32, height as u32), photo: example.photo };
                     let mut ui = Ui::new(preview, theme, example.size);
+                    if let Some(prepare) = example.prepare {
+                        prepare(&mut ui);
+                    }
                     snapshot(&mut ui, &mut renderer, &device, &queue, 2.0)
                 }
             };

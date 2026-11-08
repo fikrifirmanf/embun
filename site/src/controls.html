@@ -18,5 +18,21 @@
 {{example sliders}}
 
 <h2>Segmented control</h2>
-<p><code>segmented(theme, options, selected, on_select)</code> shows one of a few options at a time. It sizes itself to its labels.</p>
+<p><code>segmented(theme, options, selected, on_select)</code> shows one of a few options at a time. It sizes itself to its labels. With a segment focused, Left and Right select the neighbouring one.</p>
 {{example segmented_control}}
+
+<h2>Dropdown</h2>
+<p><code>dropdown(theme, options, selected, open, on_open, on_select)</code> is a pop-up picker: a glass button that shows the selected option and opens a menu of all of them. Your app owns <code>selected</code> and <code>open</code>. <code>on_open(true)</code> is sent when the button is pressed, and <code>on_open(false)</code> when it is pressed again, when Escape is pressed, or when the user presses anywhere outside the menu. A press that closes the menu does nothing else, as on macOS. Up and Down move between the options once one has focus.</p>
+{{example dropdown_closed}}
+{{example dropdown_open}}
+{{rust}}
+Msg::Open(open) => self.open = open,
+Msg::Pick(index) => {
+    self.size = index;
+    self.open = false;
+}
+{{/rust}}
+
+<h2>Disclosure</h2>
+<p><code>disclosure(theme, title, open, on_toggle, content)</code> shows or hides its content when the heading is pressed. While it is closed the content is not in the tree at all. The heading tells screen readers whether the group is expanded or collapsed.</p>
+{{example disclosure_example}}

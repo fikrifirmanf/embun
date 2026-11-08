@@ -5,7 +5,8 @@
 {{example menu_example}}
 
 <h2>Showing a menu</h2>
-<p>Wrap it in <code>popover(dismiss, content)</code> and place it with <code>absolute</code>, <code>top</code> and <code>left</code>, for example just under the button that opens it. Clicking outside, or pressing Escape, sends <code>dismiss</code>, and your <code>update</code> should then stop showing it.</p>
+<p>Wrap it in <code>popover(dismiss, content)</code> and place it with <code>absolute</code>, <code>top</code> and <code>left</code>, for example just under the button that opens it. Clicking outside, or pressing Escape, sends <code>dismiss</code>, and your <code>update</code> should then stop showing it. With a menu item focused, Up and Down move to the neighbouring item.</p>
+<p>For your own overlays, <code>on_dismiss(message)</code> does the same for any element: it sends <code>message</code> on Escape or on a press outside the element, and that press does nothing else. An overlay is never cut by a scrolling parent.</p>
 {{rust}}
 let mut window = div().child(content);
 if self.menu_open {

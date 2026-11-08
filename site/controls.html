@@ -33,7 +33,7 @@
   </button>
 </header>
 <div class="shell">
-  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html" aria-current="page">Controls</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html" aria-current="page">Controls</a></li><li><a href="progress.html">Progress, badges and tooltips</a></li><li><a href="tables.html">Tables</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
   <main id="main">
     <h1>Controls</h1>
     <p>These controls hold no state of their own. You pass the current value and a message, and your <code>update</code> changes the value. All of them tell screen readers their role and state.</p>
@@ -75,9 +75,40 @@
 }</code></pre></figure>
 
 <h2 id="segmented-control">Segmented control</h2>
-<p><code>segmented(theme, options, selected, on_select)</code> shows one of a few options at a time. It sizes itself to its labels.</p>
+<p><code>segmented(theme, options, selected, on_select)</code> shows one of a few options at a time. It sizes itself to its labels. With a segment focused, Left and Right select the neighbouring one.</p>
 <figure class="example"><div class="preview"><img class="light" src="img/segmented_control-light.png" alt="A segmented control with Day, Week and Month, Week selected" width="360" height="120"><img class="dark" src="img/segmented_control-dark.png" alt="A segmented control with Day, Week and Month, Week selected" width="360" height="120"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">segmented_control</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
     <span class="f">segmented</span>(theme, &amp;[<span class="s">&quot;Day&quot;</span>, <span class="s">&quot;Week&quot;</span>, <span class="s">&quot;Month&quot;</span>], <span class="n">1</span>, <span class="t">Msg</span>::<span class="t">View</span>)
+}</code></pre></figure>
+
+<h2 id="dropdown">Dropdown</h2>
+<p><code>dropdown(theme, options, selected, open, on_open, on_select)</code> is a pop-up picker: a glass button that shows the selected option and opens a menu of all of them. Your app owns <code>selected</code> and <code>open</code>. <code>on_open(true)</code> is sent when the button is pressed, and <code>on_open(false)</code> when it is pressed again, when Escape is pressed, or when the user presses anywhere outside the menu. A press that closes the menu does nothing else, as on macOS. Up and Down move between the options once one has focus.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/dropdown_closed-light.png" alt="A glass pop-up button showing Medium with a chevron" width="380" height="110"><img class="dark" src="img/dropdown_closed-dark.png" alt="A glass pop-up button showing Medium with a chevron" width="380" height="110"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">dropdown_closed</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">div</span>().<span class="f">w</span>(<span class="n">220.0</span>).<span class="f">child</span>(<span class="f">dropdown</span>(theme, &amp;[<span class="s">&quot;Small&quot;</span>, <span class="s">&quot;Medium&quot;</span>, <span class="s">&quot;Large&quot;</span>], <span class="n">1</span>, false, <span class="t">Msg</span>::<span class="t">Open</span>, <span class="t">Msg</span>::<span class="t">Pick</span>))
+}</code></pre></figure>
+<figure class="example"><div class="preview"><img class="light" src="img/dropdown_open-light.png" alt="The pop-up button open, with a menu of Small, Medium and Large, Medium checked" width="380" height="200"><img class="dark" src="img/dropdown_open-dark.png" alt="The pop-up button open, with a menu of Small, Medium and Large, Medium checked" width="380" height="200"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">dropdown_open</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">div</span>().<span class="f">w</span>(<span class="n">220.0</span>).<span class="f">child</span>(<span class="f">dropdown</span>(theme, &amp;[<span class="s">&quot;Small&quot;</span>, <span class="s">&quot;Medium&quot;</span>, <span class="s">&quot;Large&quot;</span>], <span class="n">1</span>, true, <span class="t">Msg</span>::<span class="t">Open</span>, <span class="t">Msg</span>::<span class="t">Pick</span>))
+}</code></pre></figure>
+<pre class="code" tabindex="0"><code><span class="t">Msg</span>::<span class="t">Open</span>(open) =&gt; <span class="k">self</span>.open = open,
+<span class="t">Msg</span>::<span class="t">Pick</span>(index) =&gt; {
+    <span class="k">self</span>.size = index;
+    <span class="k">self</span>.open = false;
+}</code></pre>
+
+<h2 id="disclosure">Disclosure</h2>
+<p><code>disclosure(theme, title, open, on_toggle, content)</code> shows or hides its content when the heading is pressed. While it is closed the content is not in the tree at all. The heading tells screen readers whether the group is expanded or collapsed.</p>
+<figure class="example"><div class="preview"><img class="light" src="img/disclosure_example-light.png" alt="An expanded Advanced group with two checkboxes, a line, and a collapsed About group" width="380" height="220"><img class="dark" src="img/disclosure_example-dark.png" alt="An expanded Advanced group with two checkboxes, a line, and a collapsed About group" width="380" height="220"></div><pre class="code" tabindex="0"><code><span class="k">fn</span> <span class="f">disclosure_example</span>(theme: &amp;<span class="t">Theme</span>) -&gt; <span class="t">Element</span>&lt;<span class="t">Msg</span>&gt; {
+    <span class="f">column</span>()
+        .<span class="f">w</span>(<span class="n">260.0</span>)
+        .<span class="f">gap_2</span>()
+        .<span class="f">child</span>(<span class="f">disclosure</span>(
+            theme,
+            <span class="s">&quot;Advanced&quot;</span>,
+            true,
+            <span class="t">Msg</span>::<span class="t">Toggle</span>,
+            <span class="f">column</span>().<span class="f">gap_2</span>().<span class="f">child</span>(<span class="f">checkbox</span>(theme, <span class="s">&quot;Show hidden files&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Toggle</span>)).<span class="f">child</span>(<span class="f">checkbox</span>(theme, <span class="s">&quot;Use the cache&quot;</span>, true, <span class="t">Msg</span>::<span class="t">Toggle</span>)),
+        ))
+        .<span class="f">child</span>(<span class="f">divider</span>(theme))
+        .<span class="f">child</span>(<span class="f">disclosure</span>(theme, <span class="s">&quot;About&quot;</span>, false, <span class="t">Msg</span>::<span class="t">Toggle</span>, <span class="f">text</span>(<span class="s">&quot;Version 0.3&quot;</span>)))
 }</code></pre></figure>
 
   </main>

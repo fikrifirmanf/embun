@@ -33,7 +33,7 @@
   </button>
 </header>
 <div class="shell">
-  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html" aria-current="page">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html" aria-current="page">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="progress.html">Progress, badges and tooltips</a></li><li><a href="tables.html">Tables</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
   <main id="main">
     <h1>Text and images</h1>
     <p>Text is set in Inter, which is embedded in the library, so it measures the same on every machine. Embun does not use Apple's fonts. Set <code>Settings::system_fonts(true)</code> to also load installed fonts, which you need for emoji and for scripts Inter does not cover.</p>
@@ -58,6 +58,9 @@
         .<span class="f">text_center</span>()
         .<span class="f">leading</span>(<span class="n">1.5</span>)
 }</code></pre></figure>
+
+<h2 id="one-line">One line</h2>
+<p><code>no_wrap</code> keeps text on one line however narrow its box is, and <code>clip</code> on the box cuts what does not fit. Together they make the single-line cells a <a href="tables.html">table</a> needs.</p>
 
 <h2 id="images">Images</h2>
 <p><code>Image::from_rgba</code> takes raw pixels. <code>Image::open</code> and <code>Image::from_bytes</code> read PNG and JPEG, and return an <code>ImageError</code> that names the file and the problem. Set <code>w</code> or <code>h</code> to scale an image, and <code>rounded</code> to clip its corners. When you set only one of them, the aspect ratio is kept.</p>

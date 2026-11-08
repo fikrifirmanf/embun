@@ -33,7 +33,7 @@
   </button>
 </header>
 <div class="shell">
-  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html" aria-current="page">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
+  <nav class="side" aria-label="Pages"><ul><li><a href="./">Getting started</a></li><li><a href="layout.html">Layout and styling</a></li><li><a href="text.html">Text and images</a></li><li><a href="buttons.html">Buttons and toolbars</a></li><li><a href="controls.html">Controls</a></li><li><a href="progress.html">Progress, badges and tooltips</a></li><li><a href="tables.html">Tables</a></li><li><a href="fields.html">Text fields</a></li><li><a href="lists.html">Lists</a></li><li><a href="menus.html" aria-current="page">Menus and dialogs</a></li><li><a href="theme.html">Theme and accessibility</a></li></ul></nav>
   <main id="main">
     <h1>Menus and dialogs</h1>
     <p>Menus and dialogs are overlays: layers over the whole window that frost the finished frame beneath them. A menu over a toolbar shows the toolbar through its glass.</p>
@@ -49,7 +49,8 @@
 }</code></pre></figure>
 
 <h2 id="showing-a-menu">Showing a menu</h2>
-<p>Wrap it in <code>popover(dismiss, content)</code> and place it with <code>absolute</code>, <code>top</code> and <code>left</code>, for example just under the button that opens it. Clicking outside, or pressing Escape, sends <code>dismiss</code>, and your <code>update</code> should then stop showing it.</p>
+<p>Wrap it in <code>popover(dismiss, content)</code> and place it with <code>absolute</code>, <code>top</code> and <code>left</code>, for example just under the button that opens it. Clicking outside, or pressing Escape, sends <code>dismiss</code>, and your <code>update</code> should then stop showing it. With a menu item focused, Up and Down move to the neighbouring item.</p>
+<p>For your own overlays, <code>on_dismiss(message)</code> does the same for any element: it sends <code>message</code> on Escape or on a press outside the element, and that press does nothing else. An overlay is never cut by a scrolling parent.</p>
 <pre class="code" tabindex="0"><code><span class="k">let</span> <span class="k">mut</span> window = <span class="f">div</span>().<span class="f">child</span>(content);
 <span class="k">if</span> <span class="k">self</span>.menu_open {
     <span class="k">let</span> menu = <span class="f">menu</span>()

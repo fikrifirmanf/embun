@@ -16,6 +16,9 @@ pub enum Msg {
     Volume(f32),
     View(usize),
     Text(String),
+    Open(bool),
+    Sort(usize),
+    Row(usize),
 }
 
 pub fn button_basic(_theme: &Theme) -> Element<Msg> {
@@ -240,4 +243,82 @@ pub fn theme_palette(theme: &Theme) -> Element<Msg> {
         .child(swatch("label", theme.label()))
         .child(swatch("separator", theme.separator()))
         .child(swatch("accent", theme.accent()))
+}
+
+pub fn progress_bars(theme: &Theme) -> Element<Msg> {
+    column()
+        .gap_4()
+        .items_start()
+        .child(progress(theme, 0.65).label("Upload"))
+        .child(progress(theme, 0.25).label("Download"))
+}
+
+pub fn progress_unknown(theme: &Theme) -> Element<Msg> {
+    column()
+        .gap_4()
+        .items_start()
+        .child(progress_indeterminate(theme).label("Loading"))
+        .child(spinner(theme).label("Loading"))
+}
+
+pub fn badges(theme: &Theme) -> Element<Msg> {
+    let entry = |name: &str, count: &str| row().items_center().gap_2().child(text(name.to_string())).child(badge(theme, count.to_string()));
+    row().gap_6().child(entry("Inbox", "12")).child(entry("Mentions", "3")).child(entry("Drafts", "1,204"))
+}
+
+pub fn dividers(theme: &Theme) -> Element<Msg> {
+    column()
+        .w(220.0)
+        .gap_2()
+        .child(text("Above"))
+        .child(divider(theme))
+        .child(text("Below"))
+}
+
+pub fn tooltip_example(_theme: &Theme) -> Element<Msg> {
+    button("Save").tooltip("Save the document").on_press(Msg::Save).into()
+}
+
+pub fn disclosure_example(theme: &Theme) -> Element<Msg> {
+    column()
+        .w(260.0)
+        .gap_2()
+        .child(disclosure(
+            theme,
+            "Advanced",
+            true,
+            Msg::Toggle,
+            column().gap_2().child(checkbox(theme, "Show hidden files", false, Msg::Toggle)).child(checkbox(theme, "Use the cache", true, Msg::Toggle)),
+        ))
+        .child(divider(theme))
+        .child(disclosure(theme, "About", false, Msg::Toggle, text("Version 0.3")))
+}
+
+pub fn dropdown_closed(theme: &Theme) -> Element<Msg> {
+    div().w(220.0).child(dropdown(theme, &["Small", "Medium", "Large"], 1, false, Msg::Open, Msg::Pick))
+}
+
+pub fn dropdown_open(theme: &Theme) -> Element<Msg> {
+    div().w(220.0).child(dropdown(theme, &["Small", "Medium", "Large"], 1, true, Msg::Open, Msg::Pick))
+}
+
+pub fn table_files(theme: &Theme) -> Element<Msg> {
+    const FILES: [(&str, &str, &str); 5] = [
+        ("Notes.txt", "Text", "2 KB"),
+        ("Photo.jpg", "Image", "3.1 MB"),
+        ("Budget.csv", "Spreadsheet", "48 KB"),
+        ("Archive.zip", "Archive", "12 MB"),
+        ("Readme.md", "Markdown", "6 KB"),
+    ];
+    table(theme, vec![Column::new("Name").grow(2.0), Column::new("Kind").width(110.0), Column::new("Size").width(80.0).right()], FILES.len(), |row, column| {
+        let file = FILES[row];
+        text([file.0, file.1, file.2][column]).no_wrap()
+    })
+    .selected(Some(1))
+    .on_select(Msg::Row)
+    .sorted_by(0, true)
+    .on_sort(Msg::Sort)
+    .w(460.0)
+    .h(190.0)
+    .into()
 }

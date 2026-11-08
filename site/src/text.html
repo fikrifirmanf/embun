@@ -8,6 +8,9 @@
 <p>Text wraps at the width of its box. <code>text_center</code> and <code>text_right</code> align the lines, and <code>leading</code> sets the line height as a multiple of the font size.</p>
 {{example text_wrapping}}
 
+<h2>One line</h2>
+<p><code>no_wrap</code> keeps text on one line however narrow its box is, and <code>clip</code> on the box cuts what does not fit. Together they make the single-line cells a <a href="tables.html">table</a> needs.</p>
+
 <h2>Images</h2>
 <p><code>Image::from_rgba</code> takes raw pixels. <code>Image::open</code> and <code>Image::from_bytes</code> read PNG and JPEG, and return an <code>ImageError</code> that names the file and the problem. Set <code>w</code> or <code>h</code> to scale an image, and <code>rounded</code> to clip its corners. When you set only one of them, the aspect ratio is kept.</p>
 {{example image_scaled}}
