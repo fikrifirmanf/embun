@@ -75,11 +75,12 @@ pub struct Button<M> {
     on_press: Option<M>,
     key: Option<String>,
     accessible_label: Option<String>,
+    tooltip: Option<String>,
 }
 
 /// A glass button with a text label.
 pub fn button<M>(label: impl Into<String>) -> Button<M> {
-    Button { label: label.into(), size: ControlSize::Regular, prominent: false, circle: false, on_press: None, key: None, accessible_label: None }
+    Button { label: label.into(), size: ControlSize::Regular, prominent: false, circle: false, on_press: None, key: None, accessible_label: None, tooltip: None }
 }
 
 /// A circular glass button holding one short glyph, such as "+" or "×".
@@ -107,6 +108,13 @@ impl<M> Button<M> {
 
     pub fn key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());
+        self
+    }
+
+    /// Shows `text` near the pointer after it rests on the button; see
+    /// [`Element::tooltip`].
+    pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+        self.tooltip = Some(text.into());
         self
     }
 
@@ -139,6 +147,9 @@ impl<M> From<Button<M>> for Element<M> {
         }
         if let Some(k) = b.key {
             e = e.key(k);
+        }
+        if let Some(t) = b.tooltip {
+            e = e.tooltip(t);
         }
         e.role(Role::Button).label(b.accessible_label.unwrap_or(b.label))
     }

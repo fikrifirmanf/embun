@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use embun_motion::{Animated, Spring};
 
-use crate::element::{Element, Kind, Role, SLIDER_THUMB};
+use crate::element::{Element, Kind, Motion, Role, SLIDER_THUMB};
 use crate::layout::{self, Rect4, ScrollInfo};
 use crate::render::Renderer;
 use crate::scene::{self, Highlight, Scene};
@@ -112,10 +112,31 @@ struct Target {
     /// The slider this element belongs to, if any.
     drag: Option<u64>,
     input: bool,
+    /// The nearest element, this one or an ancestor, with a tooltip.
+    tip: Option<u64>,
 }
 
 /// How far an arrow key, or a screen reader's increment, moves a slider.
 const SLIDER_STEP: f32 = 0.05;
+
+/// The tooltip's overlay: a small solid box below and right of `at`, kept inside the window.
+fn tooltip_box<M>(theme: &Theme, text: &str, at: [f32; 2], viewport: [f32; 2]) -> Element<M> {
+    let width = (text.chars().count() as f32 * 6.6 + 16.0).min(260.0);
+    let x = (at[0] + 12.0).min(viewport[0] - width - 4.0).max(4.0);
+    let y = (at[1] + 20.0).min(viewport[1] - 28.0).max(4.0);
+    crate::element::div()
+        .overlay()
+        .absolute()
+        .left(x)
+        .top(y)
+        .max_w(260.0)
+        .px_2()
+        .py_1()
+        .rounded(6.0)
+        .bg(theme.surface())
+        .border(1.0, theme.separator())
+        .child(crate::element::text(text.to_string()).text_size(12.0))
+}
 
 /// How a switch knob slides.
 const TOGGLE: Spring = Spring { response: 0.28, damping_fraction: 0.75 };
@@ -160,9 +181,32 @@ pub struct Ui<A: App> {
     dismiss: Option<u64>,
     access: Vec<AccessNode>,
     highlight: HashMap<u64, (Animated, Animated)>,
+    /// Seconds of looping animation, for spinners and indeterminate progress.
+    clock: f32,
+    /// Some element loops an animation, so frames keep coming.
+    animated: bool,
+    /// The tooltip text of each element that has one.
+    tips: HashMap<u64, String>,
+    tip: Tip,
+    /// Run `view` again on the next update, for a change made while the view was borrowed.
+    stale: bool,
     scene: Scene,
     dirty: bool,
 }
+
+/// The tooltip the pointer is waiting on or showing.
+#[derive(Default)]
+struct Tip {
+    /// The element whose tooltip this is.
+    id: Option<u64>,
+    /// Seconds the pointer has rested on it.
+    elapsed: f32,
+    /// Where the pointer was when the tooltip appeared.
+    shown_at: Option<[f32; 2]>,
+}
+
+/// How long the pointer rests before a tooltip appears.
+const TIP_DELAY: f32 = 0.6;
 
 impl<A: App> Ui<A> {
     pub fn new(app: A, theme: Theme, viewport: [f32; 2]) -> Self {
@@ -195,6 +239,11 @@ impl<A: App> Ui<A> {
             dismiss: None,
             access: Vec::new(),
             highlight: HashMap::new(),
+            clock: 0.0,
+            animated: false,
+            tips: HashMap::new(),
+            tip: Tip::default(),
+            stale: false,
             scene: Scene::default(),
             dirty: true,
         }
@@ -250,6 +299,10 @@ impl<A: App> Ui<A> {
             return false;
         }
         self.dirty = false;
+        if std::mem::take(&mut self.stale) {
+            self.view = None;
+            self.layout_cache = None;
+        }
         let fresh = self.view.is_none();
         self.ensure_view();
         if !fresh && self.layout_cache.is_none() {
@@ -287,6 +340,36 @@ impl<A: App> Ui<A> {
             nodes[knob].rect[0] = from + (to - from) * anim.value;
         }
 
+        // Loop spinners and indeterminate progress.
+        self.animated = false;
+        for i in 0..nodes.len() {
+            let motion = nodes[i].el.motion;
+            if motion == Motion::None {
+                continue;
+            }
+            self.animated = true;
+            let track = nodes[i].rect;
+            let kids = nodes[i].children.clone();
+            match motion {
+                Motion::Sweep => {
+                    // Back and forth, easing at both ends.
+                    let t = (self.clock / 1.4) % 2.0;
+                    let t = if t > 1.0 { 2.0 - t } else { t };
+                    let eased = t * t * (3.0 - 2.0 * t);
+                    if let Some(&fill) = kids.first() {
+                        nodes[fill].rect[0] = track[0] + (track[2] - nodes[fill].rect[2]) * eased;
+                    }
+                }
+                Motion::Bounce => {
+                    for (k, &dot) in kids.iter().enumerate() {
+                        let phase = (self.clock / 0.9 - k as f32 * 0.12).rem_euclid(1.0);
+                        nodes[dot].rect[1] -= 5.0 * (phase * std::f32::consts::PI).sin();
+                    }
+                }
+                Motion::None => {}
+            }
+        }
+
         self.targets.clear();
         self.messages.clear();
         self.dismiss = None;
@@ -294,6 +377,8 @@ impl<A: App> Ui<A> {
         let mut press_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
         let mut scroll_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
         let mut drag_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
+        let mut tip_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
+        self.tips.clear();
         for (i, n) in nodes.iter().enumerate() {
             let inherited = |v: &[Option<u64>]| n.parent.and_then(|p| v[p]);
             if n.el.role == Role::TextField || n.el.on_drag.is_some() {
@@ -317,6 +402,13 @@ impl<A: App> Ui<A> {
             };
             let scroll = if n.el.style.scroll_y { Some(n.id) } else { inherited(&scroll_of) };
             let drag = if n.el.on_drag.is_some() { Some(n.id) } else { inherited(&drag_of) };
+            let tip = if let Some(text) = &n.el.tooltip {
+                self.tips.insert(n.id, text.clone());
+                Some(n.id)
+            } else {
+                inherited(&tip_of)
+            };
+            tip_of.push(tip);
             press_of.push(press);
             scroll_of.push(scroll);
             drag_of.push(drag);
@@ -330,6 +422,7 @@ impl<A: App> Ui<A> {
                 scroll,
                 drag,
                 input: n.el.on_input.is_some(),
+                tip,
             });
             let _ = i;
         }
@@ -351,6 +444,14 @@ impl<A: App> Ui<A> {
         self.scroll.retain(|id, _| alive.contains(id));
         self.field_scroll.retain(|id, _| alive.contains(id));
         self.toggles.retain(|id, _| alive.contains(id));
+        if self.tip.id.is_some_and(|id| !alive.contains(&id)) {
+            let was_shown = self.tip.shown_at.is_some();
+            self.tip = Tip::default();
+            if was_shown {
+                self.stale = true;
+                self.dirty = true;
+            }
+        }
 
         let highlight: HashMap<u64, Highlight> =
             self.highlight.iter().map(|(&id, (press, hover))| (id, Highlight { press: press.value, hover: hover.value })).collect();
@@ -424,10 +525,12 @@ impl<A: App> Ui<A> {
                 node.set_numeric_value(v as f64);
                 node.set_min_numeric_value(0.0);
                 node.set_max_numeric_value(1.0);
-                node.set_numeric_value_step(SLIDER_STEP as f64);
-                node.add_action(accesskit::Action::SetValue);
-                node.add_action(accesskit::Action::Increment);
-                node.add_action(accesskit::Action::Decrement);
+                if a.role == accesskit::Role::Slider {
+                    node.set_numeric_value_step(SLIDER_STEP as f64);
+                    node.add_action(accesskit::Action::SetValue);
+                    node.add_action(accesskit::Action::Increment);
+                    node.add_action(accesskit::Action::Decrement);
+                }
             }
             if is_text_input(a.role) {
                 node.add_action(accesskit::Action::SetValue);
@@ -493,7 +596,13 @@ impl<A: App> Ui<A> {
     /// Runs `view` again if a message invalidated the last one.
     fn ensure_view(&mut self) {
         if self.view.is_none() {
-            self.view = Some(self.app.view(&self.theme));
+            let mut view = self.app.view(&self.theme);
+            if let (Some(at), Some(id)) = (self.tip.shown_at, self.tip.id)
+                && let Some(text) = self.tips.get(&id)
+            {
+                view.children.push(tooltip_box(&self.theme, text, at, self.viewport));
+            }
+            self.view = Some(view);
             self.expand_lists();
         }
     }
@@ -682,6 +791,20 @@ impl<A: App> Ui<A> {
         // A message may have changed what the springs should chase.
         self.update();
         let mut moving = false;
+        if self.animated {
+            self.clock += dt;
+            moving = true;
+        }
+        if self.tip.id.is_some() && self.tip.shown_at.is_none() {
+            self.tip.elapsed += dt;
+            moving = true;
+            if self.tip.elapsed >= TIP_DELAY
+                && let Some(p) = self.pointer
+            {
+                self.tip.shown_at = Some(p);
+                self.rebuild_view();
+            }
+        }
         for anim in self.toggles.values_mut() {
             moving |= anim.step(dt);
         }
@@ -723,6 +846,40 @@ impl<A: App> Ui<A> {
         self.set_slider(id, (x - rect[0] - SLIDER_THUMB / 2.0) / track);
     }
 
+    /// Left and Right on a focused tab select the neighbouring tab, and Up and
+    /// Down on a focused menu item focus the neighbouring item. False if the
+    /// key means something else.
+    fn step_focus(&mut self, key: Key) -> bool {
+        let Some(id) = self.focused else { return false };
+        if self.edit.is_some() {
+            return false;
+        }
+        self.ensure_view();
+        let Some(view) = self.view.as_ref() else { return false };
+        let nodes = layout::flatten(view, &self.theme);
+        let Some(i) = nodes.iter().position(|n| n.id == id) else { return false };
+        let (role, forward) = match (nodes[i].el.role, key) {
+            (Role::Tab, Key::Right) => (Role::Tab, true),
+            (Role::Tab, Key::Left) => (Role::Tab, false),
+            (Role::MenuItem, Key::Down) => (Role::MenuItem, true),
+            (Role::MenuItem, Key::Up) => (Role::MenuItem, false),
+            _ => return false,
+        };
+        let Some(parent) = nodes[i].parent else { return false };
+        let siblings: Vec<usize> = nodes[parent].children.iter().copied().filter(|&c| nodes[c].el.role == role).collect();
+        let Some(at) = siblings.iter().position(|&c| c == i) else { return false };
+        let next = if forward { Some(at + 1) } else { at.checked_sub(1) };
+        let Some(&target) = next.and_then(|n| siblings.get(n)) else { return true };
+        let target_id = nodes[target].id;
+        self.focus(Some(target_id));
+        if role == Role::Tab
+            && let Some(message) = self.messages.get(&target_id).cloned()
+        {
+            self.send(message);
+        }
+        true
+    }
+
     /// Arrow keys, Home and End on a focused slider. False if none is focused.
     fn nudge_slider(&mut self, key: Key) -> bool {
         let Some(id) = self.focused else { return false };
@@ -740,6 +897,22 @@ impl<A: App> Ui<A> {
         };
         self.set_slider(id, next);
         true
+    }
+
+    /// Starts waiting on `id`'s tooltip, or hides the one showing.
+    fn reset_tip(&mut self, id: Option<u64>) {
+        let was_shown = self.tip.shown_at.is_some();
+        self.tip = Tip { id, ..Tip::default() };
+        if was_shown {
+            self.rebuild_view();
+        }
+    }
+
+    /// Runs `view` again, for something that changed without a message.
+    fn rebuild_view(&mut self) {
+        self.view = None;
+        self.layout_cache = None;
+        self.dirty = true;
     }
 
     fn animate(&mut self, id: u64, press: Option<f32>, hover: Option<f32>) {
@@ -769,7 +942,11 @@ impl<A: App> Ui<A> {
                 self.dirty = true;
             }
         }
-        let hovered = self.hit(p).and_then(|t| t.press);
+        let hit = self.hit(p);
+        let (hovered, tip) = (hit.and_then(|t| t.press), hit.and_then(|t| t.tip));
+        if tip != self.tip.id {
+            self.reset_tip(tip);
+        }
         if hovered != self.hovered {
             if let Some(old) = self.hovered {
                 self.animate(old, None, Some(0.0));
@@ -788,6 +965,7 @@ impl<A: App> Ui<A> {
 
     pub fn pointer_left(&mut self) {
         self.pointer = None;
+        self.reset_tip(None);
         if let Some(old) = self.hovered.take() {
             self.animate(old, Some(0.0), Some(0.0));
         }
@@ -796,6 +974,7 @@ impl<A: App> Ui<A> {
     pub fn pointer_pressed(&mut self) {
         self.update();
         let Some(p) = self.pointer else { return };
+        self.reset_tip(None);
         let hit = self.hit(p).cloned();
         if let Some(t) = hit.as_ref().filter(|t| t.input) {
             // Clicking a text field focuses it and puts the cursor there.
@@ -895,6 +1074,7 @@ impl<A: App> Ui<A> {
                 };
                 self.focus(Some(self.focus_order[next]));
             }
+            Key::Left | Key::Right | Key::Up | Key::Down if self.step_focus(key) => {}
             Key::Activate if self.edit.is_some() => {}
             Key::Activate => {
                 if let Some(message) = self.focused.and_then(|id| self.messages.get(&id).cloned()) {
@@ -968,6 +1148,13 @@ impl<A: App> Ui<A> {
     pub(crate) fn scene(&mut self) -> &Scene {
         self.update();
         &self.scene
+    }
+
+    /// How many children the view's root has, tooltip included.
+    #[cfg(test)]
+    pub(crate) fn root_children(&mut self) -> usize {
+        self.update();
+        self.view.as_ref().map_or(0, |v| v.children.len())
     }
 
     /// The rectangle of the element with `key`, after the last update.
@@ -1052,6 +1239,7 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
                 Role::Tab => R::Tab,
                 Role::TabList => R::TabList,
                 Role::Slider => R::Slider,
+                Role::ProgressBar => R::ProgressIndicator,
                 Role::Generic if el.style.scroll_y => R::ScrollView,
                 Role::Generic => R::GenericContainer,
             };
@@ -1069,7 +1257,7 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
         focusable: el.on_press.is_some() || el.on_input.is_some() || el.on_drag.is_some(),
         toggled: matches!(el.role, Role::Switch | Role::Checkbox | Role::Radio).then_some(el.checked).flatten(),
         selected: (el.role == Role::Tab).then_some(el.checked).flatten(),
-        numeric: el.on_drag.as_ref().and(el.value),
+        numeric: (el.on_drag.is_some() || el.role == Role::ProgressBar).then_some(el.value).flatten(),
     }
 }
 

@@ -27,6 +27,21 @@ pub struct Element<M> {
     pub(crate) value: Option<f32>,
     /// For lists: builds rows on demand; see [`list`].
     pub(crate) list: Option<std::rc::Rc<ListSpec<M>>>,
+    /// A looping animation the UI drives, for progress sweeps and spinners.
+    pub(crate) motion: Motion,
+    /// Text shown near the pointer after it rests here for a moment.
+    pub(crate) tooltip: Option<String>,
+}
+
+/// A looping animation that `Ui` applies to an element's children after layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(crate) enum Motion {
+    #[default]
+    None,
+    /// The first child slides back and forth along the element.
+    Sweep,
+    /// The children hop one after another.
+    Bounce,
 }
 
 /// The rows of a [`list`] and how to build one.
@@ -67,6 +82,7 @@ pub enum Role {
     Tab,
     TabList,
     Slider,
+    ProgressBar,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -223,7 +239,7 @@ impl std::fmt::Display for ImageError {
 impl std::error::Error for ImageError {}
 
 fn node<M>(kind: Kind) -> Element<M> {
-    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None, on_drag: None, checked: None, value: None, list: None }
+    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None, on_drag: None, checked: None, value: None, list: None, motion: Motion::None, tooltip: None }
 }
 
 /// A single-line text field. It shows `value`; when the user edits it,
@@ -348,6 +364,13 @@ impl<M> Element<M> {
     }
 
     // Behavior.
+
+    /// Shows `text` in a small box near the pointer after it rests on this
+    /// element, or on anything inside it, for about half a second.
+    pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+        self.tooltip = Some(text.into());
+        self
+    }
 
     /// Sends `message` to the app's `update` when the element is clicked or,
     /// once focused, activated with Space or Return. Makes it a button for
