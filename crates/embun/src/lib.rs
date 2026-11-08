@@ -15,6 +15,7 @@ mod text;
 mod theme;
 mod ui;
 mod components;
+mod table;
 mod widgets;
 
 pub use color::Color;
@@ -24,7 +25,8 @@ pub use run::{RunError, Settings, run};
 pub use text::{FONT_FAMILY, TextSystem};
 pub use theme::{Appearance, Theme};
 pub use ui::{App, Key, Ui};
-pub use components::{badge, disclosure, divider, progress, progress_indeterminate, spinner, vertical_divider};
+pub use table::{Column, Table, table};
+pub use components::{badge, disclosure, dropdown, divider, progress, progress_indeterminate, spinner, vertical_divider};
 pub use widgets::{
     Button, ControlSize, button, checkbox, dialog, dialog_panel, icon_button, radio, segmented, slider, switch, menu, menu_check_item, menu_item, menu_separator, popover, sidebar, sidebar_heading, sidebar_item, toolbar_group,
     toolbar_item,

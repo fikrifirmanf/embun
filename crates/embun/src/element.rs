@@ -31,6 +31,8 @@ pub struct Element<M> {
     pub(crate) motion: Motion,
     /// Text shown near the pointer after it rests here for a moment.
     pub(crate) tooltip: Option<String>,
+    /// Sent on Escape, or on a press outside this element, while it is the topmost with one.
+    pub(crate) on_dismiss: Option<M>,
 }
 
 /// A looping animation that `Ui` applies to an element's children after layout.
@@ -49,6 +51,8 @@ pub(crate) struct ListSpec<M> {
     pub count: usize,
     pub row_height: f32,
     pub build: Box<dyn Fn(usize) -> Element<M>>,
+    /// Turns a row index into the message that selects it, so Up and Down on a focused row can step.
+    pub select: Option<Box<dyn Fn(usize) -> M>>,
 }
 
 /// Width of a slider's thumb. The thumb's center moves over the slider's
@@ -83,6 +87,10 @@ pub enum Role {
     TabList,
     Slider,
     ProgressBar,
+    Table,
+    Row,
+    ColumnHeader,
+    Cell,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -167,6 +175,10 @@ pub(crate) struct Style {
     pub border: Option<(f32, Color)>,
     pub glass: Option<Glass>,
     pub scroll_y: bool,
+    /// Children are cut at this element's edges.
+    pub clip_children: bool,
+    /// Text stays on one line however narrow its box is.
+    pub no_wrap: bool,
     /// Draws above everything else, including glass, which it frosts.
     pub overlay: bool,
     /// Presses on it, or on children without their own handler, go nowhere
@@ -239,7 +251,7 @@ impl std::fmt::Display for ImageError {
 impl std::error::Error for ImageError {}
 
 fn node<M>(kind: Kind) -> Element<M> {
-    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None, on_drag: None, checked: None, value: None, list: None, motion: Motion::None, tooltip: None }
+    Element { kind, style: Style::default(), children: Vec::new(), on_press: None, key: None, role: Role::Generic, label: None, on_input: None, on_drag: None, checked: None, value: None, list: None, motion: Motion::None, tooltip: None, on_dismiss: None }
 }
 
 /// A single-line text field. It shows `value`; when the user edits it,
@@ -283,9 +295,19 @@ pub fn text_area<M: 'static>(value: impl Into<String>, on_change: impl Fn(String
 /// The list ignores `gap`; put spacing inside the rows. Heights are exact to
 /// a pixel up to about a million rows of 16 px.
 pub fn list<M: 'static>(count: usize, row_height: f32, row: impl Fn(usize) -> Element<M> + 'static) -> Element<M> {
+    list_with(count, row_height, row, None)
+}
+
+/// A [`list`] whose rows know how to select their neighbours: `select(index)` is the message for row `index`.
+pub(crate) fn list_with<M: 'static>(
+    count: usize,
+    row_height: f32,
+    row: impl Fn(usize) -> Element<M> + 'static,
+    select: Option<Box<dyn Fn(usize) -> M>>,
+) -> Element<M> {
     let mut e = node(Kind::Div);
     e.style.scroll_y = true;
-    e.list = Some(std::rc::Rc::new(ListSpec { count, row_height, build: Box::new(row) }));
+    e.list = Some(std::rc::Rc::new(ListSpec { count, row_height, build: Box::new(row), select }));
     e
 }
 
@@ -364,6 +386,31 @@ impl<M> Element<M> {
     }
 
     // Behavior.
+
+    /// Sends `message` when the user presses Escape, or presses anywhere
+    /// outside this element and what is inside it. While several elements
+    /// have one, only the last in the tree, the topmost, is asked. A press
+    /// that dismisses does nothing else, as on a macOS menu. Your `update`
+    /// should then stop showing the element.
+    pub fn on_dismiss(mut self, message: M) -> Self {
+        self.on_dismiss = Some(message);
+        self
+    }
+
+    /// Cuts children at this element's edges, so content wider or taller than
+    /// the box is hidden instead of spilling over its neighbours.
+    pub fn clip(mut self) -> Self {
+        self.style.clip_children = true;
+        self
+    }
+
+    /// Keeps text on one line however narrow its box is. It does not shrink,
+    /// so put it in a box that [`Element::clip`]s it.
+    pub fn no_wrap(mut self) -> Self {
+        self.style.no_wrap = true;
+        self.style.no_shrink = true;
+        self
+    }
 
     /// Shows `text` in a small box near the pointer after it rests on this
     /// element, or on anything inside it, for about half a second.

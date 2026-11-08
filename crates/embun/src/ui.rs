@@ -114,6 +114,8 @@ struct Target {
     input: bool,
     /// The nearest element, this one or an ancestor, with a tooltip.
     tip: Option<u64>,
+    /// The nearest element, this one or an ancestor, with `on_dismiss`.
+    scope: Option<u64>,
 }
 
 /// How far an arrow key, or a screen reader's increment, moves a slider.
@@ -188,6 +190,8 @@ pub struct Ui<A: App> {
     /// The tooltip text of each element that has one.
     tips: HashMap<u64, String>,
     tip: Tip,
+    /// Elements with `on_dismiss`, in tree order, with their messages. The last is the topmost.
+    dismissals: Vec<(u64, A::Message)>,
     /// Run `view` again on the next update, for a change made while the view was borrowed.
     stale: bool,
     scene: Scene,
@@ -243,6 +247,7 @@ impl<A: App> Ui<A> {
             animated: false,
             tips: HashMap::new(),
             tip: Tip::default(),
+            dismissals: Vec::new(),
             stale: false,
             scene: Scene::default(),
             dirty: true,
@@ -378,6 +383,8 @@ impl<A: App> Ui<A> {
         let mut scroll_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
         let mut drag_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
         let mut tip_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
+        let mut scope_of: Vec<Option<u64>> = Vec::with_capacity(nodes.len());
+        self.dismissals.clear();
         self.tips.clear();
         for (i, n) in nodes.iter().enumerate() {
             let inherited = |v: &[Option<u64>]| n.parent.and_then(|p| v[p]);
@@ -386,7 +393,7 @@ impl<A: App> Ui<A> {
             }
             let press = if let Some(m) = &n.el.on_press {
                 self.messages.insert(n.id, m.clone());
-                if matches!(n.el.role, Role::Button | Role::MenuItem | Role::Switch | Role::Checkbox | Role::Radio | Role::Tab) {
+                if matches!(n.el.role, Role::Button | Role::MenuItem | Role::Switch | Role::Checkbox | Role::Radio | Role::Tab | Role::Row | Role::ColumnHeader) {
                     self.focus_order.push(n.id);
                 }
                 if n.el.style.overlay {
@@ -409,6 +416,13 @@ impl<A: App> Ui<A> {
                 inherited(&tip_of)
             };
             tip_of.push(tip);
+            let scope = if let Some(m) = &n.el.on_dismiss {
+                self.dismissals.push((n.id, m.clone()));
+                Some(n.id)
+            } else {
+                inherited(&scope_of)
+            };
+            scope_of.push(scope);
             press_of.push(press);
             scroll_of.push(scroll);
             drag_of.push(drag);
@@ -423,6 +437,7 @@ impl<A: App> Ui<A> {
                 drag,
                 input: n.el.on_input.is_some(),
                 tip,
+                scope,
             });
             let _ = i;
         }
@@ -858,6 +873,54 @@ impl<A: App> Ui<A> {
         let Some(view) = self.view.as_ref() else { return false };
         let nodes = layout::flatten(view, &self.theme);
         let Some(i) = nodes.iter().position(|n| n.id == id) else { return false };
+        if nodes[i].el.role == Role::Row && matches!(key, Key::Up | Key::Down) {
+            // A row of a list: step to the neighbouring row, which may not be built yet.
+            let mut at = i;
+            let mut found = None;
+            while let Some(p) = nodes[at].parent {
+                if nodes[p].el.list.is_some() {
+                    found = Some((p, at));
+                    break;
+                }
+                at = p;
+            }
+            let Some((list, wrapper)) = found else { return false };
+            let Some(spec) = nodes[list].el.list.clone() else { return false };
+            let Some(select) = spec.select.as_ref() else { return false };
+            let Some(index) = nodes[wrapper].el.key.as_deref().and_then(|k| k.strip_prefix("list-row-")).and_then(|n| n.parse::<usize>().ok()) else {
+                return false;
+            };
+            let next = if key == Key::Down { index + 1 } else { index.wrapping_sub(1) };
+            if next >= spec.count {
+                return true;
+            }
+            let message = select(next);
+            let list_id = nodes[list].id;
+            // Rects live in the targets: a fresh flatten has not been laid out.
+            let Some(list_height) = self.targets.iter().find(|t| t.id == list_id).map(|t| t.rect[3]) else { return false };
+            let top = next as f32 * spec.row_height;
+            let offset = self.scroll.get(&list_id).copied().unwrap_or(0.0);
+            let wanted = if top < offset {
+                top
+            } else if top + spec.row_height > offset + list_height {
+                top + spec.row_height - list_height
+            } else {
+                offset
+            };
+            self.scroll.insert(list_id, wanted);
+            self.layout_cache = None;
+            self.dirty = true;
+            self.send(message);
+            self.update();
+            let target = self.view.as_ref().and_then(|v| {
+                let nodes = layout::flatten(v, &self.theme);
+                let wanted_key = format!("list-row-{next}");
+                let w = nodes.iter().position(|n| n.el.key.as_deref() == Some(wanted_key.as_str()))?;
+                nodes[w].children.first().map(|&c| nodes[c].id)
+            });
+            self.focus(target);
+            return true;
+        }
         let (role, forward) = match (nodes[i].el.role, key) {
             (Role::Tab, Key::Right) => (Role::Tab, true),
             (Role::Tab, Key::Left) => (Role::Tab, false),
@@ -976,6 +1039,13 @@ impl<A: App> Ui<A> {
         let Some(p) = self.pointer else { return };
         self.reset_tip(None);
         let hit = self.hit(p).cloned();
+        if let Some((owner, message)) = self.dismissals.last().cloned()
+            && hit.as_ref().and_then(|t| t.scope) != Some(owner)
+        {
+            self.focus(None);
+            self.send(message);
+            return;
+        }
         if let Some(t) = hit.as_ref().filter(|t| t.input) {
             // Clicking a text field focuses it and puts the cursor there.
             let id = t.id;
@@ -1091,7 +1161,10 @@ impl<A: App> Ui<A> {
                 }
             }
             Key::Escape => {
-                if let Some(message) = self.dismiss.and_then(|id| self.messages.get(&id).cloned()) {
+                if let Some((_, message)) = self.dismissals.last().cloned() {
+                    self.focus(None);
+                    self.send(message);
+                } else if let Some(message) = self.dismiss.and_then(|id| self.messages.get(&id).cloned()) {
                     self.focus(None);
                     self.send(message);
                 } else if self.focused.is_some() {
@@ -1240,6 +1313,10 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
                 Role::TabList => R::TabList,
                 Role::Slider => R::Slider,
                 Role::ProgressBar => R::ProgressIndicator,
+                Role::Table => R::Table,
+                Role::Row => R::Row,
+                Role::ColumnHeader => R::ColumnHeader,
+                Role::Cell => R::Cell,
                 Role::Generic if el.style.scroll_y => R::ScrollView,
                 Role::Generic => R::GenericContainer,
             };
@@ -1256,7 +1333,7 @@ fn access_node<M>(n: &layout::Node<'_, M>) -> AccessNode {
         clickable: el.on_press.is_some(),
         focusable: el.on_press.is_some() || el.on_input.is_some() || el.on_drag.is_some(),
         toggled: matches!(el.role, Role::Switch | Role::Checkbox | Role::Radio).then_some(el.checked).flatten(),
-        selected: (el.role == Role::Tab).then_some(el.checked).flatten(),
+        selected: matches!(el.role, Role::Tab | Role::Row).then_some(el.checked).flatten(),
         numeric: (el.on_drag.is_some() || el.role == Role::ProgressBar).then_some(el.value).flatten(),
     }
 }

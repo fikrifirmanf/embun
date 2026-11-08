@@ -166,7 +166,7 @@ pub(crate) fn layout<M>(
 
     let mut scrolls = HashMap::new();
     let window = [0.0, 0.0, viewport[0], viewport[1]];
-    place(nodes, &tree, &ids, 0, [0.0, 0.0], window, scroll, &mut scrolls);
+    place(nodes, &tree, &ids, 0, [0.0, 0.0], window, window, scroll, &mut scrolls);
     scrolls
 }
 
@@ -177,16 +177,22 @@ fn place<M>(
     ids: &[NodeId],
     i: usize,
     origin: [f32; 2],
+    window: Rect4,
     clip: Rect4,
     scroll: &HashMap<u64, f32>,
     scrolls: &mut HashMap<u64, ScrollInfo>,
 ) {
     let l = tree.layout(ids[i]).expect("layout");
     let rect = [origin[0] + l.location.x, origin[1] + l.location.y, l.size.width, l.size.height];
+    // An overlay draws over everything, so a scrolling parent does not cut it.
+    let clip = if nodes[i].el.style.overlay { window } else { clip };
     nodes[i].rect = rect;
     nodes[i].clip = clip;
     let mut child_origin = [rect[0], rect[1]];
     let mut child_clip = clip;
+    if nodes[i].el.style.clip_children {
+        child_clip = intersect(clip, rect);
+    }
     if nodes[i].el.style.scroll_y {
         let max = (l.scrollable_overflow_rect.bottom - l.size.height).max(0.0);
         let offset = scroll.get(&nodes[i].id).copied().unwrap_or(0.0).clamp(0.0, max);
@@ -195,7 +201,7 @@ fn place<M>(
         child_clip = intersect(clip, rect);
     }
     for c in nodes[i].children.clone() {
-        place(nodes, tree, ids, c, child_origin, child_clip, scroll, scrolls);
+        place(nodes, tree, ids, c, child_origin, window, child_clip, scroll, scrolls);
     }
 }
 
@@ -314,6 +320,7 @@ fn measure<M>(
     match &node.el.kind {
         Kind::Text(content) => {
             let max_width = known.width.or(match available.width {
+                _ if node.el.style.no_wrap => None,
                 AvailableSpace::Definite(w) => Some(w),
                 AvailableSpace::MinContent => Some(0.0),
                 AvailableSpace::MaxContent => None,

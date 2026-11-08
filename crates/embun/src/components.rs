@@ -73,6 +73,42 @@ pub fn spinner<M>(theme: &Theme) -> Element<M> {
     e
 }
 
+/// A pop-up picker: a glass button showing the selected option that opens a
+/// menu of all of them. Your app owns `selected` and `open`. `on_open(true)` is
+/// sent when the button is pressed while closed, and `on_open(false)` when it
+/// is pressed while open or the user presses Escape or anywhere outside the
+/// menu. `on_select(index)` is sent when an option is chosen; your `update`
+/// should store it and close the menu.
+pub fn dropdown<M: Clone>(
+    theme: &Theme,
+    options: &[&str],
+    selected: usize,
+    open: bool,
+    on_open: impl Fn(bool) -> M,
+    on_select: impl Fn(usize) -> M,
+) -> Element<M> {
+    let current = options.get(selected).copied().unwrap_or("");
+    let trigger = row()
+        .items_center()
+        .gap_2()
+        .h(24.0)
+        .px_3()
+        .shrink_0()
+        .rounded(6.0)
+        .glass_interactive()
+        .child(text(current.to_string()).text_size(13.0))
+        .child(text("\u{2304}").text_size(13.0).font_bold().text_color(theme.secondary_label()))
+        .on_press(on_open(!open))
+        .role(Role::Button)
+        .label(format!("{current}, pop-up button"));
+    let mut group = column().self_start().child(trigger);
+    if open {
+        let items = options.iter().enumerate().map(|(i, name)| crate::menu_check_item(*name, i == selected, on_select(i)).key(format!("option{i}")));
+        group = group.child(crate::menu().overlay().absolute().top(28.0).left(0.0).on_dismiss(on_open(false)).children(items));
+    }
+    group
+}
+
 /// A heading that shows or hides `content` when pressed. Your app owns
 /// `open`; `on_toggle` is sent when the heading is pressed and should flip it.
 /// The content is indented under the title and left out of the tree while
@@ -328,5 +364,112 @@ mod tests {
         assert_eq!(bar.numeric_value(), Some(0.4f32 as f64));
         assert_eq!(bar.label(), Some("Upload"));
         assert!(!bar.supports_action(accesskit::Action::Increment), "a progress bar cannot be set");
+    }
+
+    struct Pick {
+        selected: usize,
+        open: bool,
+        dismissed: u32,
+    }
+
+    #[derive(Clone)]
+    enum PickMsg {
+        Open(bool),
+        Select(usize),
+    }
+
+    impl App for Pick {
+        type Message = PickMsg;
+
+        fn update(&mut self, message: PickMsg) {
+            match message {
+                PickMsg::Open(open) => {
+                    self.open = open;
+                    if !open {
+                        self.dismissed += 1;
+                    }
+                }
+                PickMsg::Select(i) => {
+                    self.selected = i;
+                    self.open = false;
+                }
+            }
+        }
+
+        fn view(&self, theme: &Theme) -> Element<PickMsg> {
+            // The dropdown sits in a small scroll area, which must not cut its menu.
+            column()
+                .child(
+                    column()
+                        .scroll_y()
+                        .h(60.0)
+                        .items_start()
+                        .child(dropdown(theme, &["Small", "Medium", "Large"], self.selected, self.open, PickMsg::Open, PickMsg::Select).key("drop")),
+                )
+                .child(button("Elsewhere").on_press(PickMsg::Select(0)).key("elsewhere"))
+        }
+    }
+
+    fn pick() -> Ui<Pick> {
+        Ui::new(Pick { selected: 1, open: false, dismissed: 0 }, Theme::default(), [400.0, 400.0])
+    }
+
+    fn click<A: App>(ui: &mut Ui<A>, at: [f32; 2]) {
+        ui.pointer_moved(at);
+        ui.pointer_pressed();
+        ui.pointer_released();
+    }
+
+    #[test]
+    fn a_dropdown_opens_shows_every_option_and_selects_one() {
+        let mut ui = pick();
+        let trigger = ui.rect_of_key("drop").expect("dropdown");
+        assert!(ui.rect_of_key("option0").is_none(), "closed shows no options");
+        click(&mut ui, center(trigger));
+        assert!(ui.app().open);
+        let third = ui.rect_of_key("option2").expect("third option");
+        assert!(third[1] > trigger[1] + trigger[3], "the menu opens below the button: {third:?} vs {trigger:?}");
+        click(&mut ui, center(third));
+        assert_eq!(ui.app().selected, 2);
+        assert!(!ui.app().open, "choosing closes it");
+    }
+
+    #[test]
+    fn the_menu_is_not_cut_by_a_scrolling_parent() {
+        let mut ui = pick();
+        let trigger = ui.rect_of_key("drop").expect("dropdown");
+        click(&mut ui, center(trigger));
+        // The scroll area is 60 px tall, but the last option lies below it and still takes presses.
+        let last = ui.rect_of_key("option2").expect("last option");
+        assert!(last[1] + last[3] > 60.0, "the option reaches past the scroll area: {last:?}");
+        click(&mut ui, center(last));
+        assert_eq!(ui.app().selected, 2, "and a press on it still counts");
+    }
+
+    #[test]
+    fn pressing_outside_or_escape_dismisses_without_doing_anything_else() {
+        let mut ui = pick();
+        let trigger = ui.rect_of_key("drop").expect("dropdown");
+        click(&mut ui, center(trigger));
+        let elsewhere = ui.rect_of_key("elsewhere").expect("button");
+        click(&mut ui, center(elsewhere));
+        assert!(!ui.app().open, "an outside press closes the menu");
+        assert_eq!(ui.app().dismissed, 1);
+        assert_eq!(ui.app().selected, 1, "and the button under the press did not fire");
+        click(&mut ui, center(trigger));
+        ui.key(Key::Escape);
+        assert!(!ui.app().open, "Escape closes it too");
+        assert_eq!(ui.app().dismissed, 2);
+    }
+
+    #[test]
+    fn pressing_the_button_again_closes_the_menu() {
+        let mut ui = pick();
+        let trigger = ui.rect_of_key("drop").expect("dropdown");
+        click(&mut ui, center(trigger));
+        assert!(ui.app().open);
+        click(&mut ui, center(trigger));
+        assert!(!ui.app().open);
+        assert_eq!(ui.app().dismissed, 1, "closed once, not closed and reopened");
     }
 }
